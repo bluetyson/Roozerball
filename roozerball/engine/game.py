@@ -37,6 +37,8 @@ PHASE_ORDER = [
     Phase.SCORING,
 ]
 MAX_LOG_ENTRIES = 500
+BIKER_SCORING_INTERFERENCE_BASE_PENALTY = 3
+BIKER_SCORING_INTERFERENCE_PER_OPPONENT = 3
 
 
 @dataclass
@@ -163,6 +165,7 @@ class Game:
 
     def execute_ball_phase(self) -> PhaseResult:
         messages: List[str] = []
+        messages.extend(self._enforce_biker_ball_handling())
 
         if self.ball.state in (BallState.NOT_IN_PLAY, BallState.DEAD):
             self.ball.reset()
@@ -193,7 +196,7 @@ class Game:
         return PhaseResult(Phase.INITIATIVE, messages)
 
     def execute_movement_phase(self) -> PhaseResult:
-        messages: List[str] = []
+        messages: List[str] = self._enforce_biker_ball_handling()
         if self.current_initiative_sector is None:
             messages.append("No initiative sector available.")
             self._record_messages(messages)
@@ -210,12 +213,30 @@ class Game:
             if current_square is None:
                 continue
 
-            if figure.status == FigureStatus.FALLEN:
+            # Backwards compatibility for callers/tests that set status directly
+            # without calling Figure.fall().
+            if figure.status == FigureStatus.FALLEN and not getattr(figure, "needs_stand_up", False):
+                figure.needs_stand_up = True
+            if getattr(figure, "needs_stand_up", False):
                 messages.extend(self._attempt_stand(figure))
                 continue
 
             destination = self.choose_movement_destination(figure, current_square)
             if destination is None:
+                continue
+            if not self._is_legal_movement_destination(figure, current_square, destination):
+                messages.extend(self._handle_illegal_movement(figure, current_square, destination))
+                continue
+            if self._is_biker_goal_restricted_square(figure, destination):
+                event = self.penalties.check_infraction(
+                    figure,
+                    "biker_near_goal",
+                    ball_sector=self.ball.sector_index,
+                )
+                if event.detected:
+                    messages.append(self._enforce_penalty(event))
+                else:
+                    messages.append(event.message)
                 continue
 
             origin = current_square
@@ -259,7 +280,7 @@ class Game:
         return PhaseResult(Phase.COMBAT, messages)
 
     def execute_scoring_phase(self) -> PhaseResult:
-        messages: List[str] = []
+        messages: List[str] = self._enforce_biker_ball_handling()
 
         for figure in self.all_figures():
             if not figure.has_ball or not figure.can_score:
@@ -286,6 +307,13 @@ class Game:
                 for event in self.turn_penalties
                 if event.detected and event.figure.team == figure.team
             ]
+            offense_penalties.extend(
+                self._apply_biker_scoring_interference_penalties(
+                    shooter=figure,
+                    goal_square=square,
+                    standing_opponents=standing_opponents,
+                )
+            )
             negated, negation_message = check_scoring_penalties(offense_penalties)
             if scoring_attempt.success and not negated:
                 self.team_for_side(figure.team).add_score(1)
@@ -415,16 +443,33 @@ class Game:
         return messages
 
     def _attempt_stand(self, figure: Any) -> List[str]:
-        result = dice.skill_check(figure.skill)
+        if getattr(figure, "auto_stand_next_turn", False):
+            figure.has_moved = True
+            self._complete_stand_up(figure)
+            return [f"{figure.name} recovers and automatically stands."]
+
+        modifier = self._standing_modifier(figure)
+        result = dice.skill_check(figure.skill, modifier)
         figure.has_moved = True
         if result.success:
-            figure.status = FigureStatus.STANDING
+            self._complete_stand_up(figure)
             return [f"{figure.name} stands up ({result.roll} vs {result.target})."]
 
         injury = dice.roll_injury_dice(fatality=False)
+        figure.needs_stand_up = True
+        figure.auto_stand_next_turn = injury.injury_type == "none"
         messages = [f"{figure.name} fails to stand ({result.roll} vs {result.target})."]
         messages.extend(self._apply_injury_result(figure, injury))
+        if injury.injury_type == "none":
+            messages.append(f"{figure.name} appears uninjured and will stand automatically next turn.")
         return messages
+
+    @staticmethod
+    def _complete_stand_up(figure: Any) -> None:
+        figure.needs_stand_up = False
+        figure.auto_stand_next_turn = False
+        if figure.status == FigureStatus.FALLEN:
+            figure.status = FigureStatus.STANDING
 
     def _return_ready_figures(self) -> List[str]:
         messages: List[str] = []
@@ -436,6 +481,8 @@ class Game:
                 if self.board.place_figure(figure, sector_index, Ring.MIDDLE, position):
                     figure.status = FigureStatus.STANDING
                     figure.is_on_field = True
+                    figure.needs_stand_up = False
+                    figure.auto_stand_next_turn = False
                     messages.append(f"{figure.name} returns to play.")
                     break
         return messages
@@ -562,10 +609,14 @@ class Game:
         elif injury_type == "unconscious":
             figure.status = FigureStatus.UNCONSCIOUS
             figure.is_on_field = False
+            figure.needs_stand_up = False
+            figure.auto_stand_next_turn = False
             self._remove_from_board(figure)
         elif injury_type == "dead":
             figure.status = FigureStatus.DEAD
             figure.is_on_field = False
+            figure.needs_stand_up = False
+            figure.auto_stand_next_turn = False
             self._remove_from_board(figure)
 
         if figure.has_ball and figure.status != FigureStatus.STANDING:
@@ -619,6 +670,8 @@ class Game:
             figure.drop_ball()
             if figure.status in (FigureStatus.MAN_TO_MAN, FigureStatus.FALLEN):
                 figure.status = FigureStatus.STANDING
+            figure.needs_stand_up = False
+            figure.auto_stand_next_turn = False
         self.board.place_starting_positions(
             [figure for figure in self.home_team.figures_on_field()],
             [figure for figure in self.visitor_team.figures_on_field()],
@@ -651,4 +704,103 @@ class Game:
             for candidate, cost in self.board.squares_in_range(square, figure.speed, figure.figure_type)
             if candidate.has_space_for(figure.figure_type)
             and candidate.controlling_team() not in (self.opponent_side(figure.team),)
+            and not self._is_biker_goal_restricted_square(figure, candidate)
         ]
+
+    def _is_legal_movement_destination(self, figure: Any, origin: Square, destination: Square) -> bool:
+        legal_destinations = {id(square) for square, _ in self._movement_options_with_costs(figure, origin)}
+        return id(destination) in legal_destinations
+
+    def _handle_illegal_movement(self, figure: Any, origin: Square, destination: Square) -> List[str]:
+        clockwise_sector = self.board.prev_sector(origin.sector_index)
+        if destination.sector_index != clockwise_sector:
+            return [f"{figure.name} cannot move to an illegal destination and holds position."]
+
+        offense_count = getattr(figure, "clockwise_offenses", 0) + 1
+        setattr(figure, "clockwise_offenses", offense_count)
+        infraction = "clockwise_movement_1st" if offense_count == 1 else "clockwise_movement_2nd"
+        event = self.penalties.check_infraction(
+            figure,
+            infraction,
+            ball_sector=self.ball.sector_index,
+        )
+        if event.detected:
+            return [self._enforce_penalty(event)]
+        return [event.message]
+
+    def _standing_modifier(self, figure: Any) -> int:
+        modifier = 0
+        shaken_time = getattr(figure, "shaken_time", 0)
+        if shaken_time > 0:
+            modifier -= 1
+            if shaken_time >= 4:
+                modifier -= 1
+        if any(injury.startswith("injured_") for injury in getattr(figure, "injuries", [])):
+            modifier -= 1
+        if "broken_arm" in getattr(figure, "injuries", []):
+            modifier -= 1
+        return modifier
+
+    def _goal_adjacent_sectors(self, goal_sector: int) -> set[int]:
+        return {
+            goal_sector,
+            self.board.prev_sector(goal_sector),
+            self.board.next_sector(goal_sector),
+        }
+
+    def _is_biker_goal_restricted_square(self, figure: Any, square: Square) -> bool:
+        if not getattr(figure, "is_biker", False):
+            return False
+        if square.ring != Ring.UPPER:
+            return False
+        restricted = self._goal_adjacent_sectors(self.board.home_goal_sector) | self._goal_adjacent_sectors(
+            self.board.visitor_goal_sector
+        )
+        return square.sector_index in restricted
+
+    def _apply_biker_scoring_interference_penalties(
+        self,
+        shooter: Any,
+        goal_square: Square,
+        standing_opponents: int,
+    ) -> List[PenaltyEvent]:
+        events: List[PenaltyEvent] = []
+        for figure in self.all_figures():
+            if figure.team != shooter.team or not getattr(figure, "is_biker", False) or not figure.is_on_field:
+                continue
+            square = self.board.find_square_of_figure(figure)
+            if square is None or square.ring != Ring.UPPER:
+                continue
+            if square.sector_index not in self._goal_adjacent_sectors(goal_square.sector_index):
+                continue
+            event = self.penalties.check_infraction(
+                figure,
+                "biker_scoring_interference",
+                ball_sector=self.ball.sector_index,
+                during_scoring=True,
+            )
+            event.minutes = BIKER_SCORING_INTERFERENCE_BASE_PENALTY + (
+                BIKER_SCORING_INTERFERENCE_PER_OPPONENT * standing_opponents
+            )
+            if event.detected:
+                self._enforce_penalty(event)
+            events.append(event)
+        return events
+
+    def _enforce_biker_ball_handling(self) -> List[str]:
+        carrier = self.ball.carrier
+        if carrier is None or not getattr(carrier, "is_biker", False):
+            return []
+        event = self.penalties.check_infraction(
+            carrier,
+            "biker_handles_ball",
+            ball_sector=self.ball.sector_index,
+        )
+        messages: List[str] = []
+        if event.detected:
+            messages.append(self._enforce_penalty(event))
+        else:
+            messages.append(event.message)
+        self.ball.declare_dead()
+        messages.append("Dead ball: biker cannot legally handle the ball.")
+        return messages

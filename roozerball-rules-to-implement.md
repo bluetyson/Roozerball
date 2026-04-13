@@ -56,11 +56,11 @@ Alternative considered: Pygame (Python) — good for 2D board games and matches 
 - [x] **B1. Ball must remain in sight at all times** — No fakes or hidden ball tricks (automatic rule) *(penalties.py: penalty table)*
 - [x] **B2. Ball must remain in motion** — Ball carrier must move into a new sector each turn; exception: may stay in goal sector up to 2 turns during scoring attempt; if blocked, must Assault forward/parallel square; penalty: dead ball (automatic rule) *(engine/game.py: Game.execute_movement_phase, Game._enforce_ball_carrier_movement)*
 - [x] **B3. Ball may not be used as a weapon** — Penalty: 3 minutes + dead ball *(penalties.py: PENALTY_TIMES, combat.py: check_combat_penalties)*
-- [ ] **B4. Counterclockwise movement only** — Figures may never move clockwise or backwards (automatic rule); penalty: 1st offense 3 min, 2nd offense 1 period
+- [x] **B4. Counterclockwise movement only** — Figures may never move clockwise or backwards (automatic rule); penalty: 1st offense 3 min, 2nd offense 1 period *(engine/game.py: Game._is_legal_movement_destination, Game._handle_illegal_movement)*
 - [x] **B5. Max two figures stopped** — A team may have at most 2 figures stopped on track at any time; exceptions: defensive screen at activated goal (up to 5 skaters + 2 catchers), injured/unconscious/dead figures don't count; penalty: 3 min per extra figure *(penalties.py: check_stopped_figures)*
 - [x] **B6. Skaters/catchers may not attack bikers** — Penalty: 3 minutes (includes grabbing a ride on opposing bike) *(combat.py: calculate_combat_modifiers, penalties.py)*
 - [x] **B7. Bikers may not attack anyone** — No sideswipe, ram, or run over; penalty: 3 minutes *(combat.py: calculate_combat_modifiers, penalties.py)*
-- [ ] **B8. Bikers cannot handle ball or be near goal** — Cannot enter 2 squares in front of goal, cannot pick up/carry/score with ball, cannot interfere with scoring; penalties: 3 min for entering goal squares or handling ball; goal disqualified + 3 min + 3 min per opponent involved for scoring interference on offense
+- [x] **B8. Bikers cannot handle ball or be near goal** — Cannot enter 2 squares in front of goal, cannot pick up/carry/score with ball, cannot interfere with scoring; penalties: 3 min for entering goal squares or handling ball; goal disqualified + 3 min + 3 min per opponent involved for scoring interference on offense *(engine/game.py: Game._is_biker_goal_restricted_square, Game._enforce_biker_ball_handling, Game._apply_biker_scoring_interference_penalties; ball.py: Ball.attempt_pickup)*
 - [x] **B9. Penalties on scoring attempts** — Any penalty on offense during the scoring turn negates the goal *(scoring.py: check_scoring_penalties)*
 - [x] **B10. No attacking fallen/prone figures** — May not attack downed, injured, unconscious, or figures attempting to stand; "out of contention" hand-raise means immune from attack; penalty: 3 min; exception: biker knocked off motorcycle or crash landing on downed figure *(combat.py: calculate_combat_modifiers)*
 - [x] **B11. Max figures on field** — Max 10 per team: 5 skaters, 2 catchers, 3 bikers (automatic rule); can field fewer due to penalties/injuries but cannot exceed type maximums; no extra figures sent to help injured off track *(penalties.py: check_field_composition)*
@@ -134,9 +134,9 @@ Alternative considered: Pygame (Python) — good for 2D board games and matches 
 ### Falling Down & Getting Up
 
 - [x] **D15. Falling** — Failed skill roll after fight or obstacle = fall; fallen figure may not be attacked (penalty check for attacker) *(figures.py: fall(), FigureStatus.FALLEN)*
-- [ ] **D16. Standing up** — Attempt during movement phase; skill roll to stand (counts as full movement); failure: roll injury dice (no fatality) — may reveal hidden injury; if truly OK, automatic stand next turn
+- [x] **D16. Standing up** — Attempt during movement phase; skill roll to stand (counts as full movement); failure: roll injury dice (no fatality) — may reveal hidden injury; if truly OK, automatic stand next turn *(engine/game.py: Game._attempt_stand, Game._standing_modifier; figures.py: Figure.needs_stand_up, auto_stand_next_turn)*
 - [x] **D17. Fallen figure limitations** — No actions; fallen catcher can't field ball or protect teammates from unfielded ball; BUT can hand off ball, fight, and attempt to score (these are NOT actions) *(figures.py: can_act, can_field_ball properties)*
-- [ ] **D18. Injured/shaken standing** — Must make adjusted skill roll to stand; continue attempting each turn until successful
+- [x] **D18. Injured/shaken standing** — Must make adjusted skill roll to stand; continue attempting each turn until successful *(engine/game.py: Game._standing_modifier, Game._attempt_stand; figures.py: Figure.needs_stand_up)*
 - [x] **D19. "Out of contention"** — Shaken/injured figure attempting to leave can raise hand; immune from attack; drawing a penalty if attacked *(constants.py: FigureStatus.OUT_OF_CONTENTION)*
 
 ### Actions
@@ -380,7 +380,7 @@ Alternative considered: Pygame (Python) — good for 2D board games and matches 
 - [ ] **I1. Unmoved figure rule** — Upright figure without cone is not considered "there" for blocking, controlling, hand-offs, or taking ball
 - [x] **I2. Penalty dice always rolled** — Regardless of whether penalty is actually called, dice are rolled for every infraction *(penalties.py: check_infraction always rolls)*
 - [x] **I3. Dead ball field reset** — Full reset only after: successful goal or failed scoring attempt resulting in dead ball; all other dead balls: cannon fires next turn, players stay where they are *(engine/game.py: Game.execute_ball_phase, Game.execute_scoring_phase)*
-- [ ] **I4. Cone marking** — Always mark moved figures with cones; absolutely key to game flow
+- [x] **I4. Cone marking** — Always mark moved figures with cones; absolutely key to game flow *(gui/app.py: RoozerballApp._draw_highlights)*
 
 ---
 
@@ -391,13 +391,13 @@ Alternative considered: Pygame (Python) — good for 2D board games and matches 
 - [x] **GUI3. Ball visualization** — Cannon fire animation, ball movement clockwise, hot/warm/cool state indicators *(gui/app.py: RoozerballApp._draw_ball, _refresh_summary)*
 - [x] **GUI4. Turn phase UI** — Clear indication of current phase (Clock, Ball, Initiative, Movement, Combat, Score) *(gui/app.py: RoozerballApp._refresh_summary)*
 - [x] **GUI5. Initiative tracker** — Show current sector with initiative; highlight active sector *(gui/app.py: RoozerballApp._refresh_summary)*
-- [ ] **GUI6. Cone/marker system** — Visual markers for moved figures, man-to-man pairs, fallen figures, obstacles
+- [x] **GUI6. Cone/marker system** — Visual markers for moved figures, man-to-man pairs, fallen figures, obstacles *(gui/app.py: RoozerballApp._draw_highlights)*
 - [ ] **GUI7. Dice rolling UI** — Animated dice rolls for 2d6, d12, d6, injury dice, direction die, missed-shot die
 - [x] **GUI8. Penalty box & timer display** — Off-track area showing penalized/shaken/resting figures with countdown *(gui/app.py: RoozerballApp._refresh_summary)*
 - [x] **GUI9. Scoreboard** — Period, time remaining, score for each team *(gui/app.py: RoozerballApp._refresh_summary)*
 - [x] **GUI10. HUD for selected figure** — Show stats (Speed, Skill, Combat, Toughness), current modifiers, status (shaken/injured/etc.) *(gui/app.py: RoozerballApp._refresh_summary, _on_figure_click)*
 - [x] **GUI11. Movement highlighting** — Show legal move destinations when figure selected; show incline cost/bonus *(gui/app.py: RoozerballApp._draw_highlights, engine/game.py: Game.movement_options)*
-- [ ] **GUI12. Combat resolution overlay** — Show combat totals, modifiers, result lookup, and outcome
+- [x] **GUI12. Combat resolution overlay** — Show combat totals, modifiers, result lookup, and outcome *(gui/app.py: RoozerballApp._build_ui, RoozerballApp._latest_combat_summary)*
 - [ ] **GUI13. AI engine — computer player** — Decision-making for movement, combat initiation, scoring attempts, pack formation, tow bar usage
 - [ ] **GUI14. Game mode selection** — Computer vs Computer (simulation) or Human vs Computer
 - [ ] **GUI15. Team generation screen** — Create teams with stat rolling per rules H6–H9

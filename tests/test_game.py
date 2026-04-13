@@ -38,6 +38,50 @@ class GamePhaseTests(unittest.TestCase):
         self.assertIn("fails to stand", " ".join(result.messages))
         self.assertEqual(figure.status, FigureStatus.SHAKEN)
         self.assertEqual(figure.shaken_time, 2)
+        self.assertTrue(figure.needs_stand_up)
+
+    def test_fallen_figure_with_no_injury_failure_auto_stands_next_turn(self) -> None:
+        figure = self.game.home_team.active_figures[0]
+        figure.fall()
+        self.game.current_initiative_sector = figure.sector_index
+
+        with patch("roozerball.engine.game.dice.skill_check", return_value=CheckResult(False, 10, 7)):
+            with patch(
+                "roozerball.engine.game.dice.roll_injury_dice",
+                return_value=InjuryResult("none", 0, None, "no injury"),
+            ):
+                first = self.game.execute_movement_phase()
+
+        self.assertIn("will stand automatically next turn", " ".join(first.messages))
+        self.assertTrue(figure.needs_stand_up)
+        self.assertTrue(figure.auto_stand_next_turn)
+
+        figure.has_moved = False
+        second = self.game.execute_movement_phase()
+        self.assertIn("automatically stands", " ".join(second.messages))
+        self.assertFalse(figure.needs_stand_up)
+        self.assertEqual(figure.status, FigureStatus.STANDING)
+
+    def test_shaken_prone_figure_continues_standing_attempts(self) -> None:
+        figure = self.game.home_team.active_figures[0]
+        figure.status = FigureStatus.SHAKEN
+        figure.shaken_time = 2
+        figure.needs_stand_up = True
+        self.game.current_initiative_sector = figure.sector_index
+
+        # First stand attempt fails, second attempt (next turn) succeeds.
+        with patch("roozerball.engine.game.dice.skill_check", side_effect=[CheckResult(False, 9, 6), CheckResult(True, 4, 6)]):
+            with patch(
+                "roozerball.engine.game.dice.roll_injury_dice",
+                return_value=InjuryResult("none", 0, None, "no injury"),
+            ):
+                first = self.game.execute_movement_phase()
+                figure.has_moved = False
+                second = self.game.execute_movement_phase()
+
+        self.assertIn("fails to stand", " ".join(first.messages))
+        self.assertIn("stands", " ".join(second.messages))
+        self.assertFalse(figure.needs_stand_up)
 
     def test_ball_path_avoidance_success_and_failure(self) -> None:
         figure = self.game.home_team.active_figures[0]
@@ -170,6 +214,33 @@ class GamePhaseTests(unittest.TestCase):
 
         self.assertTrue(options)
         self.assertFalse(any(square.sector_index == clockwise_sector for square in options))
+
+    def test_biker_movement_options_exclude_goal_restricted_upper_track(self) -> None:
+        biker = next(figure for figure in self.game.home_team.active_figures if figure.is_biker)
+        self.game.board.clear_all_figures()
+        self.game.board.clear_figure_positions(self.game.all_figures(include_benched=True))
+        self.game.board.place_figure(biker, 5, Ring.UPPER, 0)
+
+        options = self.game.movement_options(biker)
+        restricted = {11, 0, 1, 5, 6, 7}
+        self.assertFalse(any(square.ring == Ring.UPPER and square.sector_index in restricted for square in options))
+
+    def test_biker_holding_ball_is_penalized_and_creates_dead_ball(self) -> None:
+        biker = next(figure for figure in self.game.home_team.active_figures if figure.is_biker)
+        self.game.board.clear_all_figures()
+        self.game.board.clear_figure_positions(self.game.all_figures(include_benched=True))
+        self.game.board.place_figure(biker, 2, Ring.MIDDLE, 0)
+        biker.pick_up_ball()
+        self.game.ball.state = BallState.FIELDED
+        self.game.ball.carrier = biker
+        self.game.current_initiative_sector = 2
+
+        with patch("roozerball.engine.penalties.dice.referee_check", return_value=CheckResult(True, 5, 8)):
+            result = self.game.execute_movement_phase()
+
+        self.assertIn("biker cannot legally handle the ball", " ".join(result.messages).lower())
+        self.assertEqual(self.game.ball.state, BallState.DEAD)
+        self.assertFalse(biker.has_ball)
 
 
 if __name__ == "__main__":

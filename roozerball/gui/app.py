@@ -41,6 +41,8 @@ SLOT_OFFSETS = {
     4: [(-12, -10), (12, -10), (-12, 10), (12, 10)],
     6: [(-18, -10), (0, -10), (18, -10), (-18, 10), (0, 10), (18, 10)],
 }
+COMBAT_KEYWORDS = ("Brawl:", "Assault:", "Swoop:")
+MAX_COMBAT_LINES_DISPLAYED = 3
 
 
 class RoozerballApp(tk.Tk if tk is not None else object):
@@ -76,7 +78,7 @@ class RoozerballApp(tk.Tk if tk is not None else object):
         summary = ttk.Frame(self, padding=8)
         summary.grid(row=1, column=1, sticky="nsew")
         summary.columnconfigure(0, weight=1)
-        summary.rowconfigure(3, weight=1)
+        summary.rowconfigure(4, weight=1)
 
         scoreboard = ttk.LabelFrame(summary, text="Scoreboard", padding=8)
         scoreboard.grid(row=0, column=0, sticky="ew")
@@ -99,8 +101,13 @@ class RoozerballApp(tk.Tk if tk is not None else object):
         self.penalty_var = tk.StringVar()
         ttk.Label(penalty_box, textvariable=self.penalty_var, justify="left").grid(row=0, column=0, sticky="w")
 
+        combat_frame = ttk.LabelFrame(summary, text="Combat Resolution", padding=8)
+        combat_frame.grid(row=3, column=0, sticky="ew", pady=(8, 0))
+        self.combat_var = tk.StringVar(value="No combat resolved yet")
+        ttk.Label(combat_frame, textvariable=self.combat_var, justify="left").grid(row=0, column=0, sticky="w")
+
         log_frame = ttk.LabelFrame(summary, text="Replay Log", padding=8)
-        log_frame.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
+        log_frame.grid(row=4, column=0, sticky="nsew", pady=(8, 0))
         log_frame.rowconfigure(0, weight=1)
         log_frame.columnconfigure(0, weight=1)
         self.log_list = tk.Listbox(log_frame, height=20)
@@ -197,6 +204,7 @@ class RoozerballApp(tk.Tk if tk is not None else object):
             if entries:
                 penalty_lines.append(f"{team.name}: " + ", ".join(entries))
         self.penalty_var.set("\n".join(penalty_lines) if penalty_lines else "No figures in the box")
+        self.combat_var.set(self._latest_combat_summary())
 
     def _refresh_log(self) -> None:
         self.log_list.delete(0, tk.END)
@@ -250,12 +258,23 @@ class RoozerballApp(tk.Tk if tk is not None else object):
             if square is None:
                 continue
             cx, cy = self._square_center(square)
-            if figure.status == FigureStatus.FALLEN:
+            # needs_stand_up is the authoritative "prone" marker flag because it
+            # persists while stand-up retries happen across shaken/injured states.
+            if figure.needs_stand_up:
                 self.canvas.create_oval(cx - 20, cy - 20, cx + 20, cy + 20, outline="#f59e0b", width=3)
             if figure.status == FigureStatus.MAN_TO_MAN:
                 self.canvas.create_rectangle(cx - 24, cy - 24, cx + 24, cy + 24, outline="#a855f7", width=2)
             if figure.has_moved:
                 self.canvas.create_oval(cx - 6, cy - 6, cx + 6, cy + 6, fill="#fef08a", outline="")
+
+        for sector in self.game.board.sectors:
+            for square in sector.all_squares():
+                if not square.has_obstacle and not square.is_on_fire:
+                    continue
+                cx, cy = self._square_center(square)
+                marker = "⚠" if square.has_obstacle else "🔥"
+                color = "#fbbf24" if square.has_obstacle else "#ef4444"
+                self.canvas.create_text(cx, cy, text=marker, fill=color, font=("Helvetica", 14, "bold"))
 
         if self.selected_figure is None:
             return
@@ -325,6 +344,17 @@ class RoozerballApp(tk.Tk if tk is not None else object):
         offsets = SLOT_OFFSETS[len(square.slots)]
         dx, dy = offsets[min(slot_index, len(offsets) - 1)]
         return x + dx, y + dy
+
+    def _latest_combat_summary(self) -> str:
+        result = self.game.last_phase_result
+        if result is not None and result.phase.value == "combat":
+            combat_lines = [line for line in result.messages if line]
+            if combat_lines:
+                return "\n".join(combat_lines[-MAX_COMBAT_LINES_DISPLAYED:])
+        recent = [entry for entry in reversed(self.game.log) if any(keyword in entry for keyword in COMBAT_KEYWORDS)]
+        if recent:
+            return recent[0]
+        return "No combat resolved yet"
 
     @staticmethod
     def _wedge_polygon(
