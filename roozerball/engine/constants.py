@@ -130,12 +130,16 @@ SLOTS_INCLINE = 4   # C4
 SLOTS_FLOOR = 6     # C4
 
 # ---------------------------------------------------------------------------
-# Timing (Rules A1, T1)
+# Timing (Rules A1, T1, H4)
 # ---------------------------------------------------------------------------
 
 PERIOD_LENGTH = 20
 NUM_PERIODS = 3
 GAME_LENGTH = 60
+
+# H4: Compressing time — each game turn = 2 minutes; 3-min penalties round up to 4
+MINUTES_PER_TURN = 2
+COMPRESSED_PENALTY_MINUTES = 4   # round-up of 3-minute penalty in 2-min-per-turn mode
 
 # ---------------------------------------------------------------------------
 # Team composition (Rules A2, B11)

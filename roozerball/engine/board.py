@@ -86,11 +86,43 @@ class Square:
             return False
         return self._upright_team_count(team_side) / total > 0.5
 
+    def is_controlled_by_active(self, team_side: TeamSide) -> bool:
+        """Rule I1 variant: only count moved/coned figures for control check."""
+        moved = [f for f in self.figures_in_square()
+                 if getattr(f, 'has_moved', True)  # default True → count
+                 and getattr(f, 'status', None) in (FigureStatus.STANDING, FigureStatus.MAN_TO_MAN)]
+        if not moved:
+            return False
+        team_moved = sum(1 for f in moved if getattr(f, 'team', None) == team_side)
+        return team_moved / len(moved) > 0.5
+
     def controlling_team(self) -> Optional[TeamSide]:
         for side in TeamSide:
             if self.is_controlled_by(side):
                 return side
         return None
+
+    def is_obstacle_square(self) -> bool:
+        """Rule F22: Square is an obstacle if it has a fallen bike, fire, dead/unconscious figure,
+        or a fast unfielded ball."""
+        if self.is_on_fire:
+            return True
+        for f in self.figures_in_square():
+            status = getattr(f, 'status', None)
+            if getattr(f, 'is_biker', False) and (
+                    getattr(f, 'feet_down', False) or getattr(f, 'cycle_damaged', False)):
+                return True  # fallen bike
+            if status in (FigureStatus.DEAD, FigureStatus.UNCONSCIOUS):
+                return True  # sprawled figure
+            if (status in (FigureStatus.INJURED, FigureStatus.BADLY_SHAKEN)
+                    and not getattr(f, 'needs_stand_up', False)):
+                return True  # sprawled injured
+        return self.has_obstacle
+
+    def is_non_obstacle(self, figure: Any) -> bool:
+        """Rule F23: A figure in this square is NOT an obstacle if it's still trying to stand (180°)."""
+        return (getattr(figure, 'needs_stand_up', False)
+                and getattr(figure, 'status', None) not in (FigureStatus.DEAD, FigureStatus.UNCONSCIOUS))
 
     def add_figure(self, figure: Any, slot_index: Optional[int] = None) -> bool:
         """Place figure; default lower-left (Rule C5). Returns success."""
@@ -212,6 +244,27 @@ class Board:
     def sector_distance(self, from_s: int, to_s: int) -> int:
         """Counterclockwise distance."""
         return (to_s - from_s) % 12
+
+    def are_in_base_to_base_contact(self, sq1: Square, sq2: Square) -> bool:
+        """Rule F10: At least 1/3 base overlap = in contact.
+
+        Two squares are in contact if they share a side (same ring adjacent sector,
+        or same sector adjacent ring). Diagonal (corner-to-corner) is NOT contact.
+        """
+        if sq1 is sq2:
+            return True
+        same_sector = sq1.sector_index == sq2.sector_index
+        adj_sector = abs((sq1.sector_index - sq2.sector_index + 12) % 12) in (1, 11)
+        same_ring = sq1.ring == sq2.ring
+        adj_ring = abs(sq1.ring.value - sq2.ring.value) == 1
+
+        # Side-by-side in same ring (different sectors)
+        if same_ring and adj_sector and sq1.position == sq2.position:
+            return True
+        # Same sector, adjacent rings
+        if same_sector and adj_ring and sq1.position == sq2.position:
+            return True
+        return False
 
     def get_adjacent_squares(self, square: Square) -> List[Square]:
         """Squares adjacent (same sector cross-ring, same ring adjacent sector)."""

@@ -13,10 +13,12 @@ from roozerball.engine.ball import Ball
 from roozerball.engine.board import Board, Square
 from roozerball.engine.combat import (
     resolve_brawl,
+    validate_swoop,
 )
 from roozerball.engine.constants import (
     BallState,
     FigureStatus,
+    FigureType,
     Phase,
     PERIOD_LENGTH,
     NUM_PERIODS,
@@ -39,6 +41,9 @@ PHASE_ORDER = [
 MAX_LOG_ENTRIES = 500
 BIKER_SCORING_INTERFERENCE_BASE_PENALTY = 3
 BIKER_SCORING_INTERFERENCE_PER_OPPONENT = 3
+# H3: endurance — max play time = toughness + 3; rest 3-6 min
+ENDURANCE_REST_MIN = 3
+ENDURANCE_REST_MAX = 6
 
 
 @dataclass
@@ -181,6 +186,15 @@ class Game:
                     f"Ball rolls through {len(visited)} squares at speed {self.ball.speed} on {self.ball.ring.name.lower()}."
                 )
             messages.extend(self._resolve_ball_path(visited))
+            # F14: loose ball pickup — figures in ball's path may use action to pick up
+            if self.ball.state in (BallState.ON_TRACK,) and self.ball.carrier is None:
+                ball_sq = self.board.get_square(
+                    self.ball.sector_index, self.ball.ring, self.ball.position
+                )
+                for fig in ball_sq.figures_in_square():
+                    if self.ball.carrier is not None:
+                        break
+                    messages.extend(self._try_loose_ball_pickup(fig, ball_sq))
             self.penalties.update_referee_positions(self.ball.sector_index)
             if self.ball.state == BallState.DEAD:
                 messages.append("Ball is dead; teams hold their places for the next cannon blast.")
@@ -249,8 +263,17 @@ class Game:
                 )
                 if figure.has_ball:
                     messages.extend(self._update_ball_carrier_progress(figure, origin, destination))
+                # F21-F24: obstacle skill check on entering square
+                messages.extend(self._check_obstacle_entry(figure, destination))
+                # F11: hand-off opportunity when ball carrier reaches a teammate
+                if figure.has_ball:
+                    messages.extend(self._check_handoff_opportunity(figure))
+                # H3: track endurance
+                self._advance_endurance(figure)
 
         messages.extend(self._enforce_ball_carrier_movement(initial_carrier, initial_sector))
+        # A11: Goal tending — check if defense set up a screen but shooter didn't attempt
+        messages.extend(self._check_goal_tending())
         self._record_messages(messages)
         return PhaseResult(Phase.MOVEMENT, messages)
 
@@ -268,9 +291,13 @@ class Game:
                 if not home_figures or not visitor_figures:
                     continue
 
-                outcome = resolve_brawl(home_figures, visitor_figures)
+                # G12-G13: attacker picks one opposing figure; AI picks highest-combat
+                # opponent, but all teammates in base-to-base may join
+                outcome = resolve_brawl(home_figures, visitor_figures, board=self.board)
                 for figure in home_figures + visitor_figures:
                     figure.has_fought = True
+                    # H3: each combat subtracts 1 min from endurance
+                    figure.endurance_used = getattr(figure, 'endurance_used', 0) + 1
                 messages.extend(outcome.messages)
                 messages.extend(self._apply_outcome_injuries(outcome))
                 messages.extend(self._apply_combat_penalties(outcome))
@@ -672,6 +699,19 @@ class Game:
                 figure.status = FigureStatus.STANDING
             figure.needs_stand_up = False
             figure.auto_stand_next_turn = False
+            figure.released_tow_bar_this_turn = False
+            figure.goal_screen_lap = None
+            # Detach any tow bars
+            if getattr(figure, 'tow_bar_holder', False):
+                figure.is_towed = False
+                figure.tow_bar_holder = False
+                figure.towed_by = None
+            if hasattr(figure, 'towing'):
+                figure.towing.clear()
+            # Clear carrying state
+            figure.is_being_carried = False
+            figure.carried_by = None
+            figure.is_carrying = None
         self.board.place_starting_positions(
             [figure for figure in self.home_team.figures_on_field()],
             [figure for figure in self.visitor_team.figures_on_field()],
@@ -804,3 +844,405 @@ class Game:
         self.ball.declare_dead()
         messages.append("Dead ball: biker cannot legally handle the ball.")
         return messages
+
+    # -----------------------------------------------------------------------
+    # F21-F24: Obstacle skill check when entering a square
+    # -----------------------------------------------------------------------
+
+    def _check_obstacle_entry(self, figure: Any, square: Square) -> List[str]:
+        """Rule F21-F24: skill check when entering a square with an obstacle."""
+        messages: List[str] = []
+        # F24: Cannot enter full or controlled squares (handled earlier by movement options)
+        # F23: figure trying to stand is NOT an obstacle
+        has_real_obstacle = square.is_obstacle_square()
+        if not has_real_obstacle:
+            # Check for obstacle figures that are truly obstacles (not F23 non-obstacles)
+            for fig in square.figures_in_square():
+                if fig is figure:
+                    continue
+                if (getattr(fig, 'status', None) in (FigureStatus.DEAD, FigureStatus.UNCONSCIOUS)
+                        or (getattr(fig, 'status', None) == FigureStatus.INJURED
+                            and not getattr(fig, 'needs_stand_up', False))):
+                    has_real_obstacle = True
+                    break
+                # Fallen bike
+                if (getattr(fig, 'is_biker', False)
+                        and (getattr(fig, 'feet_down', False) or getattr(fig, 'cycle_damaged', False))):
+                    has_real_obstacle = True
+                    break
+        if not has_real_obstacle:
+            return messages
+
+        # Catchers in same square protect teammates (T2 exception for unfielded ball)
+        catchers_present = any(
+            f.can_field_ball and f.is_on_field and f is not figure
+            for f in square.figures_in_square()
+            if getattr(f, 'team', None) == getattr(figure, 'team', None)
+        )
+        if catchers_present and getattr(figure, 'is_skater', False):
+            return messages  # Protected
+
+        result = dice.skill_check(getattr(figure, 'skill', 7))
+        if not result.success:
+            figure.fall()
+            messages.append(
+                f"{figure.name} fails obstacle check ({result.roll} vs {result.target}) — falls!")
+            if figure.has_ball:
+                messages.extend(self._drop_ball_from_carrier(figure))
+        else:
+            messages.append(f"{figure.name} clears obstacle ({result.roll} vs {result.target}).")
+        return messages
+
+    # -----------------------------------------------------------------------
+    # F11-F13: Hand-off during movement / last-second / from prone
+    # -----------------------------------------------------------------------
+
+    def _check_handoff_opportunity(self, carrier: Any) -> List[str]:
+        """Rule F11: Ball carrier may hand off to teammate in base-to-base contact.
+
+        AI: hand off to best available skater in same square.
+        """
+        messages: List[str] = []
+        if not carrier.has_ball:
+            return messages
+        carrier_sq = self.board.find_square_of_figure(carrier)
+        if carrier_sq is None:
+            return messages
+
+        # F11: hand off to skater in same or adjacent square (base-to-base contact)
+        best_target = None
+        for team in self.teams:
+            if getattr(team, 'side', None) != getattr(carrier, 'team', None):
+                continue
+            for fig in team.active_figures:
+                if fig is carrier or not fig.is_on_field or fig.is_out_of_play:
+                    continue
+                if not getattr(fig, 'is_skater', False):
+                    continue
+                fig_sq = self.board.find_square_of_figure(fig)
+                if fig_sq is None:
+                    continue
+                if self.board.are_in_base_to_base_contact(carrier_sq, fig_sq):
+                    if best_target is None or fig.skill > best_target.skill:
+                        best_target = fig
+
+        if best_target is None:
+            return messages
+
+        # Only hand off if carrier is not a skater (catcher passes to skater)
+        # or if carrier is fallen/prone (F13)
+        carrier_is_catcher = getattr(carrier, 'is_catcher', False)
+        carrier_is_fallen = getattr(carrier, 'is_fallen', False)
+        if not carrier_is_catcher and not carrier_is_fallen:
+            return messages  # Skater keeps ball unless manual hand-off in GUI
+
+        # Check for opposing figures in same square (F28 hand-off modifier)
+        opp_in_sq = len([
+            f for f in carrier_sq.figures_in_square()
+            if getattr(f, 'team', None) != getattr(carrier, 'team', None)
+        ])
+        modifier = -opp_in_sq  # -1 per opponent in square
+
+        # F13: fallen carrier hand-off gives receiver -2 skill
+        if carrier_is_fallen:
+            modifier -= 2
+
+        result = dice.skill_check(getattr(best_target, 'skill', 7), modifier)
+        if result.success:
+            carrier.has_ball = False
+            best_target.has_ball = True
+            self.ball.carrier = best_target
+            messages.append(
+                f"{carrier.name} hands off to {best_target.name} "
+                f"({result.roll} vs {result.target}).")
+        else:
+            messages.append(
+                f"{carrier.name} failed hand-off to {best_target.name} "
+                f"({result.roll} vs {result.target}) — ball dropped!")
+            messages.extend(self._drop_ball_from_carrier(carrier))
+        return messages
+
+    # -----------------------------------------------------------------------
+    # A11: Goal-tending prohibition
+    # -----------------------------------------------------------------------
+
+    def _check_goal_tending(self) -> List[str]:
+        """Rule A11: Defense may not goal-tend.
+
+        If defenders set up a screen at an activated goal sector but no scoring
+        attempt happened this lap, they must chase and complete another lap before
+        screening again.  We enforce this by logging the violation and marking the
+        figures (AI will move them away next turn).
+        """
+        messages: List[str] = []
+        if not self.ball.is_activated:
+            return messages
+
+        offense_side = self.ball.activation_team
+        if offense_side is None:
+            return messages
+        defense_side = self.opponent_side(offense_side)
+
+        goal_sector = self.goal_sector_for_team(offense_side)
+
+        # Count defenders stopped in the goal sector upper ring
+        for sector in self.board.sectors:
+            if sector.index != goal_sector:
+                continue
+            for square in sector.rings.get(Ring.UPPER, []):
+                if not square.is_goal:
+                    continue
+                screening_defenders = [
+                    f for f in square.figures_in_square()
+                    if getattr(f, 'team', None) == defense_side
+                    and getattr(f, 'is_standing', False)
+                ]
+                if not screening_defenders:
+                    continue
+                # Check if the carrier attempted a score this turn (has_scored_attempt)
+                scorer_attempted = any(
+                    f.has_scored_attempt or f.has_ball
+                    for f in self.all_figures()
+                    if getattr(f, 'team', None) == offense_side
+                )
+                if scorer_attempted:
+                    break  # Shot was attempted — goal tending is legal
+
+                # Screen with no shot attempted: mark for forced chase
+                for df in screening_defenders:
+                    lap = getattr(df, 'goal_screen_lap', None)
+                    current_lap = self.ball.laps_since_activation
+                    if lap == current_lap:
+                        messages.append(
+                            f"Goal-tending: {df.name} must chase and complete a lap before screening again.")
+                    df.goal_screen_lap = current_lap  # mark this lap
+        return messages
+
+    # -----------------------------------------------------------------------
+    # H3: Endurance tracking
+    # -----------------------------------------------------------------------
+
+    def _advance_endurance(self, figure: Any) -> None:
+        """Rule H3: Track endurance depletion for active moving figures."""
+        if not getattr(figure, 'is_on_field', False):
+            return
+        if getattr(figure, 'is_towed', False):
+            return  # Towed skaters (on bike) don't deplete endurance
+        endurance_used = getattr(figure, 'endurance_used', 0) + 1
+        figure.endurance_used = endurance_used
+        toughness = getattr(figure, 'base_toughness', 7)
+        max_endurance = toughness + 3
+        if endurance_used > max_endurance:
+            # -1 per block exceeded
+            blocks = endurance_used - max_endurance
+            penalty = -blocks
+            figure.speed_mod = min(0, getattr(figure, 'speed_mod', 0) + penalty)
+            figure.skill_mod = min(0, getattr(figure, 'skill_mod', 0) + penalty)
+            figure.combat_mod = min(0, getattr(figure, 'combat_mod', 0) + penalty)
+            figure.toughness_mod = min(0, getattr(figure, 'toughness_mod', 0) + penalty)
+
+    # -----------------------------------------------------------------------
+    # Tow bar helpers (E9-E14)
+    # -----------------------------------------------------------------------
+
+    def _attach_tow_bar(self, biker: Any, skater: Any) -> List[str]:
+        """Rule E9-E11: Attach skater to biker tow bar."""
+        messages: List[str] = []
+        if len(getattr(biker, 'towing', [])) >= 3:
+            messages.append(f"{biker.name} already towing max 3 skaters.")
+            return messages
+        biker.towing.append(skater)
+        skater.is_towed = True
+        skater.tow_bar_holder = True
+        skater.towed_by = biker
+        messages.append(f"{skater.name} grabs tow bar of {biker.name}.")
+        return messages
+
+    def _detach_tow_bar(self, skater: Any) -> List[str]:
+        """Rule E12-E14: Detach skater from tow bar."""
+        messages: List[str] = []
+        biker = getattr(skater, 'towed_by', None)
+        if biker is not None and skater in getattr(biker, 'towing', []):
+            biker.towing.remove(skater)
+        skater.is_towed = False
+        skater.tow_bar_holder = False
+        skater.released_tow_bar_this_turn = True
+        skater.towed_by = None
+        messages.append(f"{skater.name} releases tow bar.")
+        return messages
+
+    # -----------------------------------------------------------------------
+    # E15-E18: Crash triggers
+    # -----------------------------------------------------------------------
+
+    def _check_bike_crash(self, biker: Any, square: Square, modifier: int = 0) -> List[str]:
+        """Rule E15: Biker makes skill roll; failure triggers cycle chart."""
+        messages: List[str] = []
+        result = dice.skill_check(getattr(biker, 'skill', 7), modifier)
+        if result.success:
+            return messages
+        # Failed skill check → roll cycle chart (E15)
+        chart = dice.roll_cycle_chart(modifier)
+        messages.append(f"{biker.name} crashes! Cycle chart: {chart.details}")
+        if chart.thrown:
+            # E16: towed skaters make skill check
+            for skater in list(getattr(biker, 'towing', [])):
+                tow_mod = -2 if chart.result in ('thrown', 'bad_wreck') else -4
+                tow_result = dice.skill_check(getattr(skater, 'skill', 7), tow_mod)
+                if not tow_result.success:
+                    skater.fall()
+                    messages.append(f"{skater.name} loses footing after crash!")
+                messages.extend(self._detach_tow_bar(skater))
+            biker.fall()
+            biker.feet_down = True
+            messages.append(f"{biker.name} thrown from bike!")
+            if chart.result in ('bad_wreck', 'major_wreck'):
+                injury = dice.roll_injury_dice(fatality=(chart.result == 'major_wreck'))
+                messages.extend(self._apply_injury_result(biker, injury))
+                biker.cycle_damaged = True
+            # E18: if no damage, biker can attempt to restart next turn
+        elif chart.result in ('near_miss', 'skid'):
+            # Skill check to stay upright
+            stay_result = dice.skill_check(getattr(biker, 'skill', 7),
+                                           -1 if chart.result == 'skid' else 0)
+            if not stay_result.success:
+                biker.fall()
+                biker.feet_down = True
+                messages.append(f"{biker.name} skids and falls!")
+        return messages
+
+    # -----------------------------------------------------------------------
+    # E21: Damaged bike removal
+    # -----------------------------------------------------------------------
+
+    def _push_damaged_bike(self, biker: Any) -> int:
+        """Rule E21: Return movement points for pushing damaged bike."""
+        if getattr(biker, 'cycle_badly_damaged', False):
+            return 2  # needs 2 figures, moves at 2 sq/turn
+        if getattr(biker, 'cycle_damaged', False):
+            return 3  # push at 3 sq/turn
+        return 4  # on foot without bike: 4 sq/turn
+
+    # -----------------------------------------------------------------------
+    # E22-E26: Biker-specific combat rules
+    # -----------------------------------------------------------------------
+
+    def _check_biker_combat_legality(self, biker: Any) -> List[str]:
+        """Rules E23-E26: Bikers cannot be legally attacked; penalties."""
+        # E23: Any attack on biker draws penalty check (already in combat.py via G56)
+        # E24: Biker scoring involvement prohibition
+        # E25: Man-to-man auto cycle chart
+        messages: List[str] = []
+        if getattr(biker, 'status', None) == FigureStatus.MAN_TO_MAN:
+            # E25: biker in man-to-man auto-rolls cycle chart at -1
+            chart = dice.roll_cycle_chart(-1)
+            messages.append(f"{biker.name} auto-rolls cycle chart (man-to-man): {chart.details}")
+            if chart.thrown:
+                biker.fall()
+                biker.feet_down = True
+                messages.append(f"{biker.name} thrown from bike in man-to-man!")
+        return messages
+
+    # -----------------------------------------------------------------------
+    # F14-F15: Loose ball pickup during ball movement
+    # -----------------------------------------------------------------------
+
+    def _try_loose_ball_pickup(self, figure: Any, square: Square) -> List[str]:
+        """Rule F14: Use action to attempt pickup as ball passes through square."""
+        messages: List[str] = []
+        if figure.has_acted or not figure.can_act:
+            return messages
+        if not figure.is_on_field or figure.is_out_of_play:
+            return messages
+        if getattr(figure, 'is_biker', False):
+            return messages  # Bikers cannot pick up ball
+
+        # Attempt pickup
+        success, roll = self.ball.attempt_pickup(figure)
+        figure.has_acted = True
+        if success:
+            messages.append(f"{figure.name} picks up loose ball (roll {roll})!")
+        else:
+            messages.append(f"{figure.name} fails to pick up ball (roll {roll}).")
+        return messages
+
+    # -----------------------------------------------------------------------
+    # F26-F27: Carrying injured figures
+    # -----------------------------------------------------------------------
+
+    def _carry_figure(self, carrier: Any, injured: Any) -> List[str]:
+        """Rule F26: One figure carries injured at half speed."""
+        messages: List[str] = []
+        injured.is_being_carried = True
+        injured.carried_by = carrier
+        carrier.is_carrying = injured
+        # Speed halved (no downhill bonus)
+        carrier.speed_mod = (getattr(carrier, 'speed_mod', 0) - carrier.base_speed // 2)
+        messages.append(f"{carrier.name} carries {injured.name} (half speed).")
+        return messages
+
+    # -----------------------------------------------------------------------
+    # F28-F33: Cannon track interactions
+    # -----------------------------------------------------------------------
+
+    def _check_cannon_track_ball_hit(self, figure: Any) -> List[str]:
+        """Rules F31-F33: Ball hitting figure/cycle on cannon track."""
+        messages: List[str] = []
+        if self.ball.ring != Ring.CANNON:
+            return messages
+
+        biker = getattr(figure, 'is_biker', False)
+        temp = self.ball.temperature
+
+        if biker:
+            # F32: Ball hitting cycle on cannon track
+            r = dice.roll_d6()
+            if temp.value >= 3 and r >= 3:  # Big Explosion on 3-6
+                square = self.board.find_square_of_figure(figure)
+                if square:
+                    square.is_on_fire = True
+                messages.append(f"{figure.name}'s bike explodes on cannon track! Big Explosion!")
+            elif temp.value >= 2 and r >= 5:  # Very hot: explodes on 5-6
+                messages.append(f"{figure.name}'s bike explodes on cannon track!")
+        else:
+            # F31: Ball hitting figure on cannon track
+            from roozerball.engine.constants import BallTemp
+            if temp == BallTemp.VERY_HOT:
+                injury = dice.roll_injury_dice(fatality=True)
+                messages.append(f"Ball hits {figure.name} on cannon track (fatal)!")
+                messages.extend(self._apply_injury_result(figure, injury))
+            elif temp == BallTemp.HOT:
+                injury = dice.roll_injury_dice(fatality=False)
+                messages.append(f"Ball hits {figure.name} on cannon track (hot)!")
+                messages.extend(self._apply_injury_result(figure, injury))
+            else:
+                injury = dice.roll_injury_dice(fatality=True, bdd=True)
+                messages.append(f"Ball hits {figure.name} on cannon track!")
+                messages.extend(self._apply_injury_result(figure, injury))
+
+        # F33: Figure/cycle knocked down to top slot of upper track
+        upper_sq = self.board.get_square(figure.sector_index or 0, Ring.UPPER, 0)
+        self.board.move_figure(figure, upper_sq)
+        messages.append(f"{figure.name} knocked to upper track from cannon track hit.")
+        return messages
+
+    # -----------------------------------------------------------------------
+    # G36: Goal sector push direction
+    # -----------------------------------------------------------------------
+
+    def _goal_push_direction(self, goal_sector: int) -> str:
+        """Rule G36: 50% left, 50% right for pushes in goal sector."""
+        return 'left' if dice.roll_d6() <= 3 else 'right'
+
+    # -----------------------------------------------------------------------
+    # H4: 2-minute time-compression mode
+    # -----------------------------------------------------------------------
+
+    @property
+    def minutes_per_turn(self) -> int:
+        """Rule H4: Default 1 min/turn; optional 2-min mode."""
+        return getattr(self, '_minutes_per_turn', 1)
+
+    def set_time_compression(self, enabled: bool) -> None:
+        """Enable/disable H4 2-minute-per-turn mode."""
+        self._minutes_per_turn = 2 if enabled else 1

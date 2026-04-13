@@ -70,6 +70,18 @@ class Figure:
     towed_by: Optional[Any] = field(default=None, repr=False)
     towing: List[Any] = field(default_factory=list)
     tow_distance_this_turn: int = 0
+    released_tow_bar_this_turn: bool = False   # G52: letting go of tow bar into fight
+
+    # Carrying injured figures (F26-F27)
+    is_being_carried: bool = False
+    carried_by: Optional[Any] = field(default=None, repr=False)
+    is_carrying: Optional[Any] = field(default=None, repr=False)
+
+    # Endurance (H3)
+    endurance_used: int = 0       # minutes of play used this game
+
+    # Goal tending (A11)
+    goal_screen_lap: Optional[int] = None   # lap count when screen was set up
 
     # Position
     sector_index: Optional[int] = None
@@ -179,6 +191,7 @@ class Figure:
         self.has_acted = False
         self.has_scored_attempt = False
         self.tow_distance_this_turn = 0
+        self.released_tow_bar_this_turn = False
 
     def advance_timers(self) -> None:
         """Reduce penalty/shaken/rest timers by 1 (Rule T1)."""
@@ -237,6 +250,9 @@ class Biker(Figure):
     cycle_destroyed: bool = False
     feet_down: bool = False
     consecutive_turns_fixing: int = 0
+    entered_field_this_turn: bool = False   # E6: entering field or standstill
+    is_dismounted: bool = False             # E23: dismounted biker still counts as biker
+    failed_stand_turns: int = 0             # E18: track failed bike-start attempts
 
     def __post_init__(self) -> None:
         self.figure_type = FigureType.BIKER
@@ -245,8 +261,13 @@ class Biker(Figure):
 
     @property
     def speed(self) -> int:
+        if self.feet_down or self.cycle_destroyed:
+            return 4 if self.is_dismounted else (3 if not self.cycle_badly_damaged else 2)
         base = self.max_bike_speed + self.speed_mod + self._status_penalty()
         tow_penalty = len(self.towing)
+        # E6: entering field / starting from standstill: max move is 2
+        if self.entered_field_this_turn:
+            return BIKE_MIN_SPEED
         return max(BIKE_MIN_SPEED, min(BIKE_MAX_SPEED, base - tow_penalty))
 
     @property

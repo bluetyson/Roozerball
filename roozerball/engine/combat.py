@@ -43,6 +43,7 @@ def calculate_combat_modifiers(
     attacker_figures: List[Any],
     defender_figures: List[Any],
     combat_type: CombatType,
+    board: Optional["Board"] = None,
 ) -> Tuple[int, int, List[Tuple[str, int]], List[Tuple[str, int]], List[Tuple[Any, str]]]:
     """Calculate all applicable combat modifiers (Rules G44-G57).
 
@@ -62,7 +63,53 @@ def calculate_combat_modifiers(
         atk_mods.append(('Moving vs standing', MOD_MOVING_VS_STANDING))
 
     # Team controls square: +1 (G48)
-    # (simplified — check if any attacker's square is controlled by their team)
+    if board is not None and attacker_figures:
+        atk_square = board.find_square_of_figure(attacker_figures[0])
+        if atk_square is not None:
+            atk_team = getattr(attacker_figures[0], 'team', None)
+            if atk_team is not None and atk_square.is_controlled_by(atk_team):
+                atk_mod += MOD_CONTROLS_SQUARE
+                atk_mods.append(('Controls square', MOD_CONTROLS_SQUARE))
+    if board is not None and defender_figures:
+        def_square = board.find_square_of_figure(defender_figures[0])
+        if def_square is not None:
+            def_team = getattr(defender_figures[0], 'team', None)
+            if def_team is not None and def_square.is_controlled_by(def_team):
+                def_mod += MOD_CONTROLS_SQUARE
+                def_mods.append(('Controls square', MOD_CONTROLS_SQUARE))
+
+    # Supporting figures: +1 per adjacent non-fallen/non-injured/non-unconscious teammate (G44)
+    if board is not None and combat_type != CombatType.SWOOP:
+        for group, mod_list, sign in [
+            (attacker_figures, atk_mods, 'atk'),
+            (defender_figures, def_mods, 'def'),
+        ]:
+            if not group:
+                continue
+            primary = group[0]
+            primary_sq = board.find_square_of_figure(primary)
+            if primary_sq is None:
+                continue
+            team = getattr(primary, 'team', None)
+            adj_sqs = board.get_adjacent_squares(primary_sq)
+            supporters = 0
+            for adj_sq in adj_sqs:
+                for fig in adj_sq.figures_in_square():
+                    if (fig is not primary and fig not in group
+                            and getattr(fig, 'team', None) == team
+                            and not getattr(fig, 'is_fallen', False)
+                            and getattr(fig, 'status', None) not in (
+                                FigureStatus.UNCONSCIOUS, FigureStatus.DEAD,
+                                FigureStatus.INJURED)):
+                        supporters += 1
+            if supporters:
+                bonus = MOD_SUPPORTING_FIGURE * supporters
+                if sign == 'atk':
+                    atk_mod += bonus
+                    atk_mods.append((f'Supporting figures ×{supporters}', bonus))
+                else:
+                    def_mod += bonus
+                    def_mods.append((f'Supporting figures ×{supporters}', bonus))
 
     # Swoop bonus (G53)
     if combat_type == CombatType.SWOOP:
@@ -98,6 +145,49 @@ def calculate_combat_modifiers(
             if getattr(f, 'upper_hand', False):
                 def_mod += MOD_UPPER_HAND
                 def_mods.append(('Upper hand', MOD_UPPER_HAND))
+
+    # Holding cycle tow bar: +1 (G45)
+    if combat_type != CombatType.SWOOP:
+        for f in attacker_figures:
+            if getattr(f, 'tow_bar_holder', False) and not getattr(f, 'released_tow_bar_this_turn', False):
+                atk_mod += MOD_HOLDING_TOW_BAR
+                atk_mods.append(('Holding tow bar', MOD_HOLDING_TOW_BAR))
+        for f in defender_figures:
+            if getattr(f, 'tow_bar_holder', False) and not getattr(f, 'released_tow_bar_this_turn', False):
+                def_mod += MOD_HOLDING_TOW_BAR
+                def_mods.append(('Holding tow bar', MOD_HOLDING_TOW_BAR))
+
+    # Letting go of tow bar into fight: +2 (G52)
+    for f in attacker_figures:
+        if getattr(f, 'released_tow_bar_this_turn', False):
+            atk_mod += MOD_RELEASE_TOW_INTO_FIGHT
+            atk_mods.append(('Released tow bar into fight', MOD_RELEASE_TOW_INTO_FIGHT))
+
+    # Slot directly above opponent: +1 (G46)
+    # Slot directly behind opponent: +2 (G51, not in standing fistfight)
+    if board is not None and combat_type not in (CombatType.MAN_TO_MAN,):
+        for atk in attacker_figures:
+            atk_sq = board.find_square_of_figure(atk)
+            atk_slot = getattr(atk, 'slot_index', None)
+            for def_ in defender_figures:
+                def_sq = board.find_square_of_figure(def_)
+                def_slot = getattr(def_, 'slot_index', None)
+                if atk_sq is None or def_sq is None:
+                    continue
+                # Slot directly above: same sector/position, one ring higher
+                if (atk_sq.sector_index == def_sq.sector_index
+                        and atk_sq.position == def_sq.position
+                        and atk_sq.ring.value == def_sq.ring.value + 1
+                        and atk_slot is not None and def_slot is not None
+                        and atk_slot % 2 == def_slot % 2):
+                    atk_mod += MOD_SLOT_ABOVE
+                    atk_mods.append(('Slot above', MOD_SLOT_ABOVE))
+                # Slot directly behind: one sector clockwise (behind = right/clockwise)
+                if (atk_sq.ring == def_sq.ring
+                        and atk_sq.ring.value > 0  # not floor (no behind bonus on floor)
+                        and (atk_sq.sector_index + 1) % 12 == def_sq.sector_index):
+                    atk_mod += MOD_SLOT_BEHIND
+                    atk_mods.append(('Slot behind', MOD_SLOT_BEHIND))
 
     # Penalty checks for illegal actions
     for f in attacker_figures:
@@ -152,13 +242,14 @@ def _apply_skill_checks(
 def resolve_brawl(
     attacker_figures: List[Any],
     defender_figures: List[Any],
+    board: Optional["Board"] = None,
 ) -> CombatOutcome:
     """Resolve a brawl (Rules G11-G20)."""
     outcome = CombatOutcome(combat_type=CombatType.BRAWL)
 
     # Calculate modifiers
     atk_mod, def_mod, atk_mods, def_mods, penalties = calculate_combat_modifiers(
-        attacker_figures, defender_figures, CombatType.BRAWL)
+        attacker_figures, defender_figures, CombatType.BRAWL, board=board)
     outcome.penalties = penalties
 
     # Sum combat values + modifiers + 2d6 (G2, G14)
@@ -207,12 +298,12 @@ def resolve_brawl(
     return outcome
 
 
-def resolve_man_to_man(figure1: Any, figure2: Any) -> CombatOutcome:
+def resolve_man_to_man(figure1: Any, figure2: Any, board: Optional["Board"] = None) -> CombatOutcome:
     """Resolve man-to-man combat (Rules G21-G26)."""
     outcome = CombatOutcome(combat_type=CombatType.MAN_TO_MAN)
 
     atk_mod, def_mod, _, _, penalties = calculate_combat_modifiers(
-        [figure1], [figure2], CombatType.MAN_TO_MAN)
+        [figure1], [figure2], CombatType.MAN_TO_MAN, board=board)
     outcome.penalties = penalties
 
     c1 = getattr(figure1, 'combat', 5) + atk_mod + dice.roll_2d6()
@@ -259,6 +350,7 @@ def resolve_man_to_man(figure1: Any, figure2: Any) -> CombatOutcome:
 def resolve_assault(
     attacker_figures: List[Any],
     defender_figures: List[Any],
+    board: Optional["Board"] = None,
 ) -> CombatOutcome:
     """Resolve an assault (Rules G27-G36)."""
     outcome = CombatOutcome(combat_type=CombatType.ASSAULT)
@@ -268,7 +360,7 @@ def resolve_assault(
     defenders = defender_figures[:4]
 
     atk_mod, def_mod, _, _, penalties = calculate_combat_modifiers(
-        attackers, defenders, CombatType.ASSAULT)
+        attackers, defenders, CombatType.ASSAULT, board=board)
     outcome.penalties = penalties
 
     atk_combat = sum(getattr(f, 'combat', 5) for f in attackers)
@@ -308,12 +400,12 @@ def resolve_assault(
     return outcome
 
 
-def resolve_swoop(swooper: Any, target: Any) -> CombatOutcome:
+def resolve_swoop(swooper: Any, target: Any, board: Optional["Board"] = None) -> CombatOutcome:
     """Resolve a swoop attack (Rules G37-G43)."""
     outcome = CombatOutcome(combat_type=CombatType.SWOOP)
 
     atk_mod, def_mod, _, _, penalties = calculate_combat_modifiers(
-        [swooper], [target], CombatType.SWOOP)
+        [swooper], [target], CombatType.SWOOP, board=board)
     outcome.penalties = penalties
 
     c1 = getattr(swooper, 'combat', 5) + atk_mod + dice.roll_2d6()
@@ -364,6 +456,26 @@ def _pair_man_to_man(
         outcome.man_to_man_pairs.append((w, l))
         outcome.messages.append(
             f"Man-to-man: {getattr(w,'name','?')} vs {getattr(l,'name','?')}")
+
+
+def validate_swoop(swooper: Any, target: Any, board: Optional["Board"] = None) -> Tuple[bool, str]:
+    """Validate swoop requirements (Rule G39-G40).
+
+    Returns (valid, reason_if_invalid).
+    """
+    # Must have moved down at least 1 ring (G39)
+    if getattr(swooper, 'is_towed', False):
+        return False, "Cannot swoop while being towed"
+    if board is not None:
+        swooper_sq = board.find_square_of_figure(swooper)
+        target_sq = board.find_square_of_figure(target)
+        if swooper_sq is not None and target_sq is not None:
+            # Must attack from slot above target (G39): one ring higher, same sector
+            if swooper_sq.ring.value != target_sq.ring.value + 1:
+                return False, "Swooper must be exactly one ring above target"
+            if swooper_sq.sector_index != target_sq.sector_index:
+                return False, "Swooper must be in the same sector as target"
+    return True, ""
 
 
 def check_combat_penalties(outcome: CombatOutcome) -> List[Tuple[Any, int, str]]:
