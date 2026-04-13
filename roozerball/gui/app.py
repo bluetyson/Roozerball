@@ -5,7 +5,7 @@ import math
 from typing import Any, Dict, Optional
 
 from roozerball.engine.constants import FigureStatus, Ring, SQUARES_PER_RING
-from roozerball.engine.game import Game
+from roozerball.engine.game import Game, MAX_LOG_ENTRIES
 
 try:
     import tkinter as tk
@@ -209,7 +209,7 @@ class RoozerballApp(tk.Tk if tk is not None else object):
 
     def _refresh_log(self) -> None:
         self.log_list.delete(0, tk.END)
-        for entry in self.game.log[-200:]:
+        for entry in self.game.log[-MAX_LOG_ENTRIES:]:
             self.log_list.insert(tk.END, entry)
         if self.game.log:
             self.log_list.yview_moveto(1.0)

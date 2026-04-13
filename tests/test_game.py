@@ -42,7 +42,7 @@ class GamePhaseTests(unittest.TestCase):
     def test_ball_path_avoidance_success_and_failure(self) -> None:
         figure = self.game.home_team.active_figures[0]
         self.game.board.clear_all_figures()
-        self.game.board._clear_all_figure_positions(self.game.all_figures(include_benched=True))
+        self.game.board.clear_figure_positions(self.game.all_figures(include_benched=True))
         self.game.board.place_figure(figure, 0, Ring.MIDDLE, 0)
         path = [{"sector": 0, "ring": Ring.MIDDLE, "position": 0}]
 

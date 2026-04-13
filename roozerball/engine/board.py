@@ -312,7 +312,7 @@ class Board:
     ) -> None:
         """Place figures in the standard middle-ring starting sectors."""
         self.clear_all_figures()
-        self._clear_all_figure_positions(home_figures + visitor_figures)
+        self.clear_figure_positions(home_figures + visitor_figures)
         self._place_team_starting_figures(home_figures, TeamSide.HOME)
         self._place_team_starting_figures(visitor_figures, TeamSide.VISITOR)
 
@@ -401,7 +401,7 @@ class Board:
                     if self.place_figure(figure, sector_index, Ring.MIDDLE, fallback_position):
                         break
 
-    def _clear_all_figure_positions(self, figures: List[Any]) -> None:
+    def clear_figure_positions(self, figures: List[Any]) -> None:
         for figure in figures:
             figure.sector_index = None
             figure.ring = None

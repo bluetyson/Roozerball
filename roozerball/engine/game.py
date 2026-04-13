@@ -299,12 +299,7 @@ class Game:
 
     def choose_movement_destination(self, figure: Any, current_square: Square) -> Optional[Square]:
         """Choose a simple AI destination for a figure."""
-        reachable = [
-            square
-            for square, _ in self.board.squares_in_range(current_square, figure.speed, figure.figure_type)
-            if square.has_space_for(figure.figure_type)
-            and square.controlling_team() not in (self.opponent_side(figure.team),)
-        ]
+        reachable = [square for square, _ in self._movement_options_with_costs(figure, current_square)]
         if not reachable:
             return None
 
@@ -345,13 +340,7 @@ class Game:
 
     def movement_options_with_costs(self, figure: Any) -> List[tuple[Square, int]]:
         square = self.board.find_square_of_figure(figure)
-        if square is None:
-            return []
-        return [
-            (candidate, cost)
-            for candidate, cost in self.board.squares_in_range(square, figure.speed, figure.figure_type)
-            if candidate.has_space_for(figure.figure_type)
-        ]
+        return self._movement_options_with_costs(figure, square)
 
     def all_figures(self, include_benched: bool = False) -> List[Any]:
         figures: List[Any] = []
@@ -597,3 +586,17 @@ class Game:
     @staticmethod
     def _sector_gap(first: int, second: int) -> int:
         return min((first - second) % 12, (second - first) % 12)
+
+    def _movement_options_with_costs(
+        self,
+        figure: Any,
+        square: Optional[Square],
+    ) -> List[tuple[Square, int]]:
+        if square is None:
+            return []
+        return [
+            (candidate, cost)
+            for candidate, cost in self.board.squares_in_range(square, figure.speed, figure.figure_type)
+            if candidate.has_space_for(figure.figure_type)
+            and candidate.controlling_team() not in (self.opponent_side(figure.team),)
+        ]
