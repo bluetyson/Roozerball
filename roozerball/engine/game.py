@@ -729,9 +729,10 @@ class Game:
 
     def _standing_modifier(self, figure: Any) -> int:
         modifier = 0
-        if getattr(figure, "shaken_time", 0) > 0:
+        shaken_time = getattr(figure, "shaken_time", 0)
+        if shaken_time > 0:
             modifier -= 1
-            if getattr(figure, "shaken_time", 0) >= 4:
+            if shaken_time >= 4:
                 modifier -= 1
         if any(injury.startswith("injured_") for injury in getattr(figure, "injuries", [])):
             modifier -= 1
@@ -778,7 +779,7 @@ class Game:
                 during_scoring=True,
             )
             event.minutes = BIKER_SCORING_INTERFERENCE_BASE_PENALTY + (
-                BIKER_SCORING_INTERFERENCE_PER_OPPONENT * max(1, standing_opponents)
+                BIKER_SCORING_INTERFERENCE_PER_OPPONENT * max(0, standing_opponents)
             )
             if event.detected:
                 self._enforce_penalty(event)

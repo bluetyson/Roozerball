@@ -126,8 +126,8 @@ class Figure:
     def is_standing(self) -> bool:
         if self.needs_stand_up:
             return False
-        # "Standing" here means upright/on skates for board-control and movement
-        # flow purposes, even if temporarily penalized by shaken/injured status.
+        # "Standing" means upright/available on-skates for movement/control flow:
+        # a figure is not standing while flagged as needing to stand up again.
         return self.status in (
             FigureStatus.STANDING,
             FigureStatus.MAN_TO_MAN,

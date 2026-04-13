@@ -69,6 +69,7 @@ class GamePhaseTests(unittest.TestCase):
         figure.needs_stand_up = True
         self.game.current_initiative_sector = figure.sector_index
 
+        # First stand attempt fails, second attempt (next turn) succeeds.
         with patch("roozerball.engine.game.dice.skill_check", side_effect=[CheckResult(False, 9, 6), CheckResult(True, 4, 6)]):
             with patch(
                 "roozerball.engine.game.dice.roll_injury_dice",

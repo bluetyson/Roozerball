@@ -257,6 +257,8 @@ class RoozerballApp(tk.Tk if tk is not None else object):
             if square is None:
                 continue
             cx, cy = self._square_center(square)
+            # needs_stand_up is the authoritative "prone" marker flag because it
+            # persists while stand-up retries happen across shaken/injured states.
             if getattr(figure, "needs_stand_up", False):
                 self.canvas.create_oval(cx - 20, cy - 20, cx + 20, cy + 20, outline="#f59e0b", width=3)
             if figure.status == FigureStatus.MAN_TO_MAN:
