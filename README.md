@@ -10,7 +10,7 @@ Current playable slice:
 - Auto-generated squads and starting lineups
 - Ball cannon, fielding, activation, lap tracking, dead-ball handling, and scoring attempts
 - Tkinter GUI with the board, scorebox, initiative display, movement highlighting, figure selection HUD, penalty/recovery display, and replay log
-- A growing implementation checklist in `/home/runner/work/Roozerball/Roozerball/roozerball-rules-to-implement.md`
+- A growing implementation checklist in `roozerball-rules-to-implement.md`
 
 It is still a work in progress, but it is absolutely at the point where you can run matches, click around the board, and sanity-check how the current rules feel.
 
@@ -26,7 +26,7 @@ No third-party Python packages are currently required.
 From the repository root:
 
 ```bash
-cd /home/runner/work/Roozerball/Roozerball
+cd /path/to/Roozerball
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -39,7 +39,7 @@ There are no package dependencies to install after that.
 From the repo root:
 
 ```bash
-cd /home/runner/work/Roozerball/Roozerball
+cd /path/to/Roozerball
 python -m roozerball.gui
 ```
 
@@ -67,7 +67,7 @@ The GUI is intentionally simple at this stage:
 ## How to run the tests
 
 ```bash
-cd /home/runner/work/Roozerball/Roozerball
+cd /path/to/Roozerball
 python -m unittest discover -s tests -q
 ```
 
@@ -88,11 +88,11 @@ Then:
 
 ## Project layout
 
-- `/home/runner/work/Roozerball/Roozerball/roozerball/engine/` — core rules and match engine
-- `/home/runner/work/Roozerball/Roozerball/roozerball/gui/` — Tkinter desktop viewer
-- `/home/runner/work/Roozerball/Roozerball/tests/` — regression tests
-- `/home/runner/work/Roozerball/Roozerball/docs/Roozerball-rules.pdf` — source rules reference
-- `/home/runner/work/Roozerball/Roozerball/roozerball-rules-to-implement.md` — implementation checklist
+- `roozerball/engine/` — core rules and match engine
+- `roozerball/gui/` — Tkinter desktop viewer
+- `tests/` — regression tests
+- `docs/Roozerball-rules.pdf` — source rules reference
+- `roozerball-rules-to-implement.md` — implementation checklist
 
 ## Current limitations
 
