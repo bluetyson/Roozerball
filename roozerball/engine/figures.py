@@ -41,6 +41,8 @@ class Figure:
     has_acted: bool = False      # one action per turn (D20)
     has_scored_attempt: bool = False
     is_on_field: bool = True
+    needs_stand_up: bool = False
+    auto_stand_next_turn: bool = False
 
     # Timers
     penalty_time: int = 0
@@ -51,6 +53,7 @@ class Figure:
     # Injuries (D6-D12)
     injuries: List[str] = field(default_factory=list)
     penalty_count: int = 0
+    clockwise_offenses: int = 0
 
     # Man-to-man (G21-G26)
     man_to_man_partner: Optional[Any] = field(default=None, repr=False)
@@ -121,11 +124,20 @@ class Figure:
     # -- Status checks --
     @property
     def is_standing(self) -> bool:
-        return self.status in (FigureStatus.STANDING, FigureStatus.MAN_TO_MAN)
+        if self.needs_stand_up:
+            return False
+        return self.status in (
+            FigureStatus.STANDING,
+            FigureStatus.MAN_TO_MAN,
+            FigureStatus.SHAKEN,
+            FigureStatus.BADLY_SHAKEN,
+            FigureStatus.INJURED,
+            FigureStatus.OUT_OF_CONTENTION,
+        )
 
     @property
     def is_fallen(self) -> bool:
-        return self.status == FigureStatus.FALLEN
+        return self.needs_stand_up or self.status == FigureStatus.FALLEN
 
     @property
     def is_out_of_play(self) -> bool:
@@ -183,6 +195,8 @@ class Figure:
 
     def fall(self) -> None:
         self.status = FigureStatus.FALLEN
+        self.needs_stand_up = True
+        self.auto_stand_next_turn = False
 
     def pick_up_ball(self) -> None:
         self.has_ball = True

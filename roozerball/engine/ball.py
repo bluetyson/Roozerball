@@ -146,6 +146,8 @@ class Ball:
 
     def attempt_pickup(self, figure: Any, modifier: int = 0) -> tuple:
         """Skill check to pick up dropped ball (Rule C19). Catchers get +2."""
+        if getattr(figure, "is_biker", False):
+            return (False, 0)
         bonus = 2 if getattr(figure, 'is_catcher', False) else 0
         result = dice.skill_check(getattr(figure, 'skill', 7), modifier + bonus)
         if result.success:
