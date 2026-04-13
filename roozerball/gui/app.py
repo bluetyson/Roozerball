@@ -22,6 +22,13 @@ TEAM_COLORS = {
     "visitor": "#d62728",
 }
 
+FIGURE_LABELS = {
+    "bruiser": "B",
+    "speeder": "S",
+    "catcher": "C",
+    "biker": "K",
+}
+
 RING_RADII = {
     Ring.FLOOR: (40, 90),
     Ring.LOWER: (90, 150),
@@ -274,15 +281,7 @@ class RoozerballApp(tk.Tk if tk is not None else object):
                 continue
             x, y = self._slot_center(square, figure.slot_index or 0)
             color = TEAM_COLORS[figure.team.value]
-            label = figure.figure_type.value[0].upper()
-            if figure.figure_type.value == "bruiser":
-                label = "B"
-            elif figure.figure_type.value == "speeder":
-                label = "S"
-            elif figure.figure_type.value == "catcher":
-                label = "C"
-            elif figure.figure_type.value == "biker":
-                label = "K"
+            label = FIGURE_LABELS.get(figure.figure_type.value, figure.figure_type.value[0].upper())
 
             item = self.canvas.create_oval(x - 14, y - 14, x + 14, y + 14, fill=color, outline="white", width=2)
             self.canvas.create_text(x, y, text=label, fill="white", font=("Helvetica", 10, "bold"))
