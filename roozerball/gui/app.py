@@ -42,6 +42,7 @@ SLOT_OFFSETS = {
     6: [(-18, -10), (0, -10), (18, -10), (-18, 10), (0, 10), (18, 10)],
 }
 COMBAT_KEYWORDS = ("Brawl:", "Assault:", "Swoop:")
+MAX_COMBAT_LINES_DISPLAYED = 3
 
 
 class RoozerballApp(tk.Tk if tk is not None else object):
@@ -349,7 +350,7 @@ class RoozerballApp(tk.Tk if tk is not None else object):
         if result is not None and result.phase.value == "combat":
             combat_lines = [line for line in result.messages if line]
             if combat_lines:
-                return "\n".join(combat_lines[-3:])
+                return "\n".join(combat_lines[-MAX_COMBAT_LINES_DISPLAYED:])
         recent = [entry for entry in reversed(self.game.log) if any(keyword in entry for keyword in COMBAT_KEYWORDS)]
         if recent:
             return recent[0]

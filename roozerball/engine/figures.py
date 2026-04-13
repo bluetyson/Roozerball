@@ -124,6 +124,7 @@ class Figure:
     # -- Status checks --
     @property
     def is_standing(self) -> bool:
+        """True when the figure is upright and not awaiting stand-up recovery."""
         if self.needs_stand_up:
             return False
         # "Standing" means upright/available on-skates for movement/control flow:

@@ -779,7 +779,7 @@ class Game:
                 during_scoring=True,
             )
             event.minutes = BIKER_SCORING_INTERFERENCE_BASE_PENALTY + (
-                BIKER_SCORING_INTERFERENCE_PER_OPPONENT * max(0, standing_opponents)
+                BIKER_SCORING_INTERFERENCE_PER_OPPONENT * standing_opponents
             )
             if event.detected:
                 self._enforce_penalty(event)
