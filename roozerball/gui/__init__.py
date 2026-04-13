@@ -1,5 +1,11 @@
-"""Roozerball GUI exports."""
+"""Roozerball GUI entry points."""
 
-from roozerball.gui.app import RoozerballApp, launch
+__all__ = ["launch", "RoozerballApp"]
 
-__all__ = ["RoozerballApp", "launch"]
+
+def __getattr__(name: str):
+    if name in {"launch", "RoozerballApp"}:
+        from roozerball.gui.app import RoozerballApp, launch
+
+        return {"launch": launch, "RoozerballApp": RoozerballApp}[name]
+    raise AttributeError(name)

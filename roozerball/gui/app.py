@@ -2,13 +2,20 @@
 from __future__ import annotations
 
 import math
-import tkinter as tk
-from tkinter import ttk
 from typing import Any, Dict, Optional
 
 from roozerball.engine.constants import FigureStatus, Ring, SQUARES_PER_RING
 from roozerball.engine.game import Game
 
+try:
+    import tkinter as tk
+    from tkinter import ttk
+except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
+    tk = None
+    ttk = None
+    _TK_ERROR = exc
+else:
+    _TK_ERROR = None
 
 TEAM_COLORS = {
     "home": "#1f77b4",
@@ -29,10 +36,12 @@ SLOT_OFFSETS = {
 }
 
 
-class RoozerballApp(tk.Tk):
+class RoozerballApp(tk.Tk if tk is not None else object):
     """Small desktop UI for stepping through the match."""
 
     def __init__(self, game: Optional[Game] = None) -> None:
+        if tk is None:  # pragma: no cover - environment dependent
+            raise RuntimeError("tkinter is not available in this environment") from _TK_ERROR
         super().__init__()
         self.title("Roozerball")
         self.geometry("1400x860")
@@ -347,6 +356,8 @@ class RoozerballApp(tk.Tk):
 
 
 def launch() -> None:
+    if tk is None:  # pragma: no cover - environment dependent
+        raise RuntimeError("tkinter is not available in this environment") from _TK_ERROR
     app = RoozerballApp()
     app.mainloop()
 
