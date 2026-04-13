@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from roozerball.engine.constants import (
     Ring, SECTORS, SQUARES_PER_RING, SLOTS_INCLINE, SLOTS_FLOOR,
     TeamSide, FigureType, FigureStatus,
-    DOWNHILL_CONSECUTIVE, UPHILL_CONSECUTIVE_EXTRA,
+    DOWNHILL_CONSECUTIVE, UPHILL_CONSECUTIVE_EXTRA, STARTING_SECTOR_CYCLE,
 )
 
 
@@ -238,6 +238,83 @@ class Board:
         """Return sector indices starting from given, clockwise through 12 (Rule T4)."""
         return [(starting_sector + i) % 12 for i in range(12)]
 
+    def squares_in_initiative_order(self, sector_index: int) -> List[Square]:
+        """Squares within a sector in initiative order (inside→outside, left→right)."""
+        return self.sectors[sector_index].all_squares()
+
+    def figures_in_initiative_order(self, starting_sector: int) -> List[Any]:
+        """All figures ordered by sector initiative and square slot order."""
+        figures: List[Any] = []
+        seen: set[int] = set()
+        for sector_index in self.get_initiative_order(starting_sector):
+            for square in self.squares_in_initiative_order(sector_index):
+                for slot in square.slots:
+                    figure = slot.figure
+                    if figure is None:
+                        continue
+                    fig_id = id(figure)
+                    if fig_id in seen:
+                        continue
+                    seen.add(fig_id)
+                    figures.append(figure)
+        return figures
+
+    def find_square_of_figure(self, figure: Any) -> Optional[Square]:
+        """Locate the square currently holding a figure."""
+        for sector in self.sectors:
+            for square in sector.all_squares():
+                if any(slot.figure is figure for slot in square.slots):
+                    return square
+        return None
+
+    def place_figure(
+        self,
+        figure: Any,
+        sector_index: int,
+        ring: Ring,
+        position: int,
+        slot_index: Optional[int] = None,
+    ) -> bool:
+        """Place a figure on the specified square and update its position fields."""
+        current_square = self.find_square_of_figure(figure)
+        if current_square is not None:
+            current_square.remove_figure(figure)
+
+        square = self.get_square(sector_index, ring, position)
+        if not square.add_figure(figure, slot_index):
+            return False
+
+        self._update_figure_position(figure, square)
+        return True
+
+    def move_figure(
+        self,
+        figure: Any,
+        destination: Square,
+        slot_index: Optional[int] = None,
+    ) -> bool:
+        """Move a figure from its current square to another square."""
+        origin = self.find_square_of_figure(figure)
+        if origin is None:
+            return False
+        origin.remove_figure(figure)
+        if not destination.add_figure(figure, slot_index):
+            origin.add_figure(figure)
+            return False
+        self._update_figure_position(figure, destination)
+        return True
+
+    def place_starting_positions(
+        self,
+        home_figures: List[Any],
+        visitor_figures: List[Any],
+    ) -> None:
+        """Place figures in the standard middle-ring starting sectors."""
+        self.clear_all_figures()
+        self._clear_all_figure_positions(home_figures + visitor_figures)
+        self._place_team_starting_figures(home_figures, TeamSide.HOME)
+        self._place_team_starting_figures(visitor_figures, TeamSide.VISITOR)
+
     def calculate_incline_bonus(self, ring_changes: List[int]) -> int:
         """Compute speed bonus/cost for ring transitions.
 
@@ -306,3 +383,35 @@ class Board:
                         results.append((adj, new_cost))
 
         return results
+
+    def _place_team_starting_figures(
+        self,
+        figures: List[Any],
+        team_side: TeamSide,
+    ) -> None:
+        sector_offset = 0 if team_side == TeamSide.HOME else 6
+        placements = [
+            ((cycle + sector_offset) % len(SECTORS), index % SQUARES_PER_RING[Ring.MIDDLE])
+            for index, cycle in enumerate(STARTING_SECTOR_CYCLE * 4)
+        ]
+        for figure, (sector_index, position) in zip(figures, placements):
+            if not self.place_figure(figure, sector_index, Ring.MIDDLE, position):
+                for fallback_position in range(SQUARES_PER_RING[Ring.MIDDLE]):
+                    if self.place_figure(figure, sector_index, Ring.MIDDLE, fallback_position):
+                        break
+
+    def _clear_all_figure_positions(self, figures: List[Any]) -> None:
+        for figure in figures:
+            figure.sector_index = None
+            figure.ring = None
+            figure.square_position = None
+            figure.slot_index = None
+
+    def _update_figure_position(self, figure: Any, square: Square) -> None:
+        figure.sector_index = square.sector_index
+        figure.ring = square.ring
+        figure.square_position = square.position
+        figure.slot_index = next(
+            (slot.index for slot in square.slots if slot.figure is figure),
+            None,
+        )

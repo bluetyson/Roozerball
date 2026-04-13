@@ -42,12 +42,12 @@ Alternative considered: Pygame (Python) — good for 2D board games and matches 
 
 ## A (cont.). The Game Turn Sequence
 
-- [ ] **T1. Clock phase** — Start period or advance clock 1 minute; advance penalty box / shaken / rest figures 1 minute; figures reaching 0:00 are eligible to return
-- [ ] **T2. Ball phase** — Fire cannon or move ball if in play but unfielded; catcher may attempt to field; non-catchers in ball's square must make skill roll to avoid ball (exception: catcher in same square protects teammates)
-- [ ] **T3. Initiative phase** — Roll d12 to determine starting sector for this game turn
-- [ ] **T4. Movement phase** — Move all figures in the initiative sector (inside ring to outside ring, left to right within each ring); mark moved figures with cones; rotate initiative clockwise through all 12 sectors
-- [ ] **T5. Combat phase** — From same starting sector, rotate initiative again for combat; each figure gets one fight; remove cones after each figure has fought; continue through all 12 sectors
-- [ ] **T6. Scoring phase** — Resolve any scoring attempts; if goal/dead ball/period end, clear board and reset to starting positions
+- [x] **T1. Clock phase** — Start period or advance clock 1 minute; advance penalty box / shaken / rest figures 1 minute; figures reaching 0:00 are eligible to return *(engine/game.py: Game.execute_clock_phase)*
+- [x] **T2. Ball phase** — Fire cannon or move ball if in play but unfielded; catcher may attempt to field; non-catchers in ball's square must make skill roll to avoid ball (exception: catcher in same square protects teammates) *(engine/game.py: Game.execute_ball_phase, Game._resolve_ball_path)*
+- [x] **T3. Initiative phase** — Roll d12 to determine starting sector for this game turn *(engine/game.py: Game.execute_initiative_phase)*
+- [x] **T4. Movement phase** — Move all figures in the initiative sector (inside ring to outside ring, left to right within each ring); mark moved figures with cones; rotate initiative clockwise through all 12 sectors *(engine/game.py: Game.execute_movement_phase, board.py: Board.figures_in_initiative_order)*
+- [x] **T5. Combat phase** — From same starting sector, rotate initiative again for combat; each figure gets one fight; remove cones after each figure has fought; continue through all 12 sectors *(engine/game.py: Game.execute_combat_phase)*
+- [x] **T6. Scoring phase** — Resolve any scoring attempts; if goal/dead ball/period end, clear board and reset to starting positions *(engine/game.py: Game.execute_scoring_phase, Game._reset_field)*
 
 ---
 
@@ -94,7 +94,7 @@ Alternative considered: Pygame (Python) — good for 2D board games and matches 
 
 ### Starting Positions & Ball Movement
 
-- [x] **C12. Standard starting positions** — 1 bike + 1–3 skaters per team placed alternating teams in middle ring, cycling through sectors A, E, C *(board.py: place_starting_positions)*
+- [x] **C12. Standard starting positions** — 1 bike + 1–3 skaters per team placed alternating teams in middle ring, cycling through sectors A, E, C *(board.py: Board.place_starting_positions)*
 - [x] **C13. Ball firing speed** — Roll 3d6 + 12 for initial ball speed; ball moves clockwise on cannon track, 1 square per movement point *(ball.py: fire_cannon, dice.py: roll_ball_speed)*
 - [x] **C14. Ball deceleration** — Each new turn: subtract 2 from speed, slip ball down half a square; after 7 turns ball reaches gutter and is declared dead regardless of firing speed *(ball.py: move_ball, constants.py: BALL_DECEL_PER_TURN, BALL_MAX_TURNS)*
 - [x] **C15. Hot ball rules** — Ball in cannon track or upper ring is "hot"; adds modifiers to catcher's attempt; risk of injury *(ball.py: update_temperature, constants.py: BallTemp)*
@@ -386,19 +386,19 @@ Alternative considered: Pygame (Python) — good for 2D board games and matches 
 
 ## Game Engine & GUI Implementation Tasks
 
-- [ ] **GUI1. Circular track board rendering** — 12 sectors × 5 rings with correct square counts; slots within squares
-- [ ] **GUI2. Figure rendering** — Skaters (bruisers/speeders), catchers, bikers with stats displayed; team colors
-- [ ] **GUI3. Ball visualization** — Cannon fire animation, ball movement clockwise, hot/warm/cool state indicators
-- [ ] **GUI4. Turn phase UI** — Clear indication of current phase (Clock, Ball, Initiative, Movement, Combat, Score)
-- [ ] **GUI5. Initiative tracker** — Show current sector with initiative; highlight active sector
+- [x] **GUI1. Circular track board rendering** — 12 sectors × 5 rings with correct square counts; slots within squares *(gui/app.py: RoozerballApp._draw_squares)*
+- [x] **GUI2. Figure rendering** — Skaters (bruisers/speeders), catchers, bikers with stats displayed; team colors *(gui/app.py: RoozerballApp._draw_figures, _refresh_summary)*
+- [x] **GUI3. Ball visualization** — Cannon fire animation, ball movement clockwise, hot/warm/cool state indicators *(gui/app.py: RoozerballApp._draw_ball, _refresh_summary)*
+- [x] **GUI4. Turn phase UI** — Clear indication of current phase (Clock, Ball, Initiative, Movement, Combat, Score) *(gui/app.py: RoozerballApp._refresh_summary)*
+- [x] **GUI5. Initiative tracker** — Show current sector with initiative; highlight active sector *(gui/app.py: RoozerballApp._refresh_summary)*
 - [ ] **GUI6. Cone/marker system** — Visual markers for moved figures, man-to-man pairs, fallen figures, obstacles
 - [ ] **GUI7. Dice rolling UI** — Animated dice rolls for 2d6, d12, d6, injury dice, direction die, missed-shot die
-- [ ] **GUI8. Penalty box & timer display** — Off-track area showing penalized/shaken/resting figures with countdown
-- [ ] **GUI9. Scoreboard** — Period, time remaining, score for each team
-- [ ] **GUI10. HUD for selected figure** — Show stats (Speed, Skill, Combat, Toughness), current modifiers, status (shaken/injured/etc.)
-- [ ] **GUI11. Movement highlighting** — Show legal move destinations when figure selected; show incline cost/bonus
+- [x] **GUI8. Penalty box & timer display** — Off-track area showing penalized/shaken/resting figures with countdown *(gui/app.py: RoozerballApp._refresh_summary)*
+- [x] **GUI9. Scoreboard** — Period, time remaining, score for each team *(gui/app.py: RoozerballApp._refresh_summary)*
+- [x] **GUI10. HUD for selected figure** — Show stats (Speed, Skill, Combat, Toughness), current modifiers, status (shaken/injured/etc.) *(gui/app.py: RoozerballApp._refresh_summary, _on_figure_click)*
+- [x] **GUI11. Movement highlighting** — Show legal move destinations when figure selected; show incline cost/bonus *(gui/app.py: RoozerballApp._draw_highlights, engine/game.py: Game.movement_options)*
 - [ ] **GUI12. Combat resolution overlay** — Show combat totals, modifiers, result lookup, and outcome
 - [ ] **GUI13. AI engine — computer player** — Decision-making for movement, combat initiation, scoring attempts, pack formation, tow bar usage
 - [ ] **GUI14. Game mode selection** — Computer vs Computer (simulation) or Human vs Computer
 - [ ] **GUI15. Team generation screen** — Create teams with stat rolling per rules H6–H9
-- [ ] **GUI16. Replay / log** — Turn-by-turn game log for reviewing what happened
+- [x] **GUI16. Replay / log** — Turn-by-turn game log for reviewing what happened *(gui/app.py: RoozerballApp._refresh_log)*

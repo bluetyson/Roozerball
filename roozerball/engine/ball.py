@@ -47,6 +47,7 @@ class Ball:
     laps_since_activation: int = 0
     activation_sector: Optional[int] = None
     fielding_team: Optional[TeamSide] = None
+    carried_sector_progress: int = 0
 
     def fire_cannon(self) -> str:
         """Fire ball from cannon (Rule C13)."""
@@ -60,6 +61,7 @@ class Ball:
         self.carrier = None
         self.is_activated = False
         self.laps_since_activation = 0
+        self.carried_sector_progress = 0
         return f"Cannon fires! Ball at speed {self.speed} in sector {SECTORS[self.sector_index]}"
 
     def move_ball(self) -> List[dict]:
@@ -121,6 +123,7 @@ class Ball:
             catcher.has_ball = True
             self.fielding_team = getattr(catcher, 'team', None)
             self.activation_sector = self.sector_index
+            self.carried_sector_progress = 0
             return FieldResult(True, False, injury_result, f"Caught! Roll {roll} vs {target}")
 
         if diff <= 2:
@@ -155,12 +158,14 @@ class Ball:
         self.carrier = None
         self.state = BallState.ON_TRACK
         self.speed = 1
+        self.carried_sector_progress = 0
         return "Ball dropped! Rolling downhill at speed 1"
 
     def declare_dead(self) -> None:
         """Declare ball dead (Rule A10)."""
         self.state = BallState.DEAD
         self.speed = 0
+        self.carried_sector_progress = 0
         if self.carrier:
             self.carrier.has_ball = False
         self.carrier = None
@@ -183,6 +188,7 @@ class Ball:
         self.is_activated = True
         self.activation_team = team
         self.laps_since_activation = 0
+        self.carried_sector_progress = 0
         return f"Ball activated for {team.value}!"
 
     def steal(self, stealing_team: TeamSide, steal_sector: int) -> str:
@@ -192,6 +198,7 @@ class Ball:
         self.activation_sector = steal_sector
         self.fielding_team = stealing_team
         self.laps_since_activation = 0
+        self.carried_sector_progress = 0
         return f"Ball stolen by {stealing_team.value}!"
 
     def check_three_lap_limit(self) -> bool:
@@ -228,3 +235,4 @@ class Ball:
         self.activation_sector = None
         self.activation_team = None
         self.fielding_team = None
+        self.carried_sector_progress = 0
