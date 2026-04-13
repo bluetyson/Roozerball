@@ -109,6 +109,7 @@ class InjuryFace(Enum):
 # ---------------------------------------------------------------------------
 
 SECTORS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+NUM_SECTORS = len(SECTORS)
 
 SQUARES_PER_RING = {
     Ring.FLOOR: 1,
