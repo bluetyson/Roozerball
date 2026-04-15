@@ -148,7 +148,7 @@ func _setup_lighting() -> void:
 	environment.background_color = Color(0.04, 0.04, 0.08)
 	environment.ambient_light_color = Color(0.15, 0.15, 0.2)
 	environment.ambient_light_energy = 0.4
-	environment.tonemap_mode = Environment.TONE_MAP_ACES
+	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.4
 	environment.glow_bloom = 0.3
