@@ -179,11 +179,15 @@ class Game:
         messages: List[str] = []
         messages.extend(self._enforce_biker_ball_handling())
 
-        if self.ball.state in (BallState.NOT_IN_PLAY, BallState.DEAD):
+        if self.field_reset_pending:
+            messages.append(self._reset_field("Scoring/dead-ball reset"))
+            self.field_reset_pending = False
+            messages.append(self.ball.fire_cannon())
+            self.penalties.update_referee_positions(self.ball.sector_index)
+        elif self.ball.state in (BallState.NOT_IN_PLAY, BallState.DEAD):
             self.ball.reset()
             messages.append(self.ball.fire_cannon())
             self.penalties.update_referee_positions(self.ball.sector_index)
-            self.field_reset_pending = False
         elif self.ball.carrier is not None:
             messages.append(f"Ball controlled by {self.ball.carrier.name}.")
         else:
