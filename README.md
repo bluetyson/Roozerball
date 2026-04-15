@@ -293,3 +293,89 @@ The following are automated or AI-controlled in the current build; manual human-
 - Pack formation decisions
 
 The Computer vs Computer mode is fully playable and a good way to stress-test the rules logic.
+
+---
+
+## Future Improvements
+
+### Human-Interactive Play (Next Major Milestone)
+
+- **Click-to-target combat** — let the human player pick which opposing figure to attack, and choose whether to escalate a marginal brawl to man-to-man
+- **Tow bar controls** — grab/release tow bars on demand (click a biker, then click a skater to attach; click again to release)
+- **Pack formation builder** — drag figures into desired formation patterns before movement resolves
+- **Movement confirmation** — preview a move path with distance/cost shown, click to confirm instead of auto-resolving
+- **Scoring shot control** — choose when to attempt a shot vs. continue circling for a better angle
+
+### AI & Strategy
+
+- **Difficulty levels** — Easy / Medium / Hard AI with progressively smarter targeting, positioning, and ball-carrier protection
+- **Configurable AI profiles** — aggressive (more swoops, more fouls), defensive (pack-and-protect, tow-bar heavy), balanced
+- **Replay analysis** — post-match breakdown showing possession time, combat win %, shot accuracy, and per-figure stat lines
+- **Tactical heatmaps** — overlay showing combat frequency, ball-carrier paths, and scoring attempts by sector
+
+### Quality of Life
+
+- **Save / Load** — serialise full game state to JSON for mid-match saves and resume
+- **Undo / Redo** — step backward through phases or entire turns
+- **Speed controls** — adjustable auto-play speed (slow for watching, fast for stress-testing)
+- **Sound effects** — cannon fire, crashes, goals, referee whistles, crowd noise
+- **Hotkeys** — keyboard shortcuts for Next Phase (`N`), Play Turn (`P`), Undo (`Ctrl+Z`)
+- **Configurable window size** — resizable layout that adapts to different screen resolutions
+
+### Multiplayer & Sharing
+
+- **Hot-seat mode** — two human players on the same machine, alternating turns
+- **Network play** — LAN or internet multiplayer with a lightweight lobby
+- **Match replay export** — save a full match replay as a shareable file or animated GIF
+- **Season mode UI** — standings table, playoff bracket, and stat-leader boards for multi-match seasons
+
+---
+
+## Future Graphics Options
+
+The current GUI is built with **Tkinter** using procedural `Canvas` drawing — circles, polygons, and text. This is functional and dependency-free but limited in visual richness. Below are the main upgrade paths, roughly ordered from lowest to highest effort:
+
+### Tier 1 — Stay in Python, enhance Tkinter
+
+| Enhancement | Description |
+|---|---|
+| **Sprites / images** | Replace drawn circles with PNG sprite sheets for skaters, catchers, bikers, and the ball. Tkinter's `PhotoImage` (or Pillow for JPEG/WebP) supports this without extra frameworks. |
+| **Smooth animation** | Use `canvas.move()` with `after()` callbacks to animate figure movement, ball flight, and combat knockbacks instead of instant redraws. |
+| **Particle effects** | Simple canvas-based particles for cannon fire, explosions, crashes, and goal celebrations using small coloured ovals with decay timers. |
+| **Track texture** | A pre-rendered background image of the inclined circular track (concrete, painted lines, crowd in the stands) drawn behind the interactive canvas layer. |
+| **Zoom & pan** | `canvas.scale()` plus mouse-wheel zoom and click-drag pan for inspecting crowded sectors. |
+
+### Tier 2 — Python 2D game framework (Pygame / Arcade)
+
+| Enhancement | Description |
+|---|---|
+| **Pygame migration** | Swap the Tkinter canvas for a Pygame `Surface`. Gains hardware-accelerated blitting, sprite groups, real-time animation loops, and mixer audio. The engine stays pure Python — only the rendering layer changes. |
+| **Arcade library** | Modern Python 2D alternative with OpenGL-backed rendering, built-in sprite lists, particle emitters, and camera viewports. Easier API than Pygame for new contributors. |
+| **Animated sprites** | Frame-by-frame sprite animation for skating strides, biker wheelies, catcher dives, brawl punches, and swoop attacks. |
+| **Camera system** | Follow the ball carrier or lock onto a chosen sector; smooth scroll between viewpoints. |
+| **Lighting / shadows** | Simulated incline lighting — upper-ring figures cast longer shadows; spotlight on the ball carrier. |
+
+### Tier 3 — Dedicated game engine (Godot)
+
+The [`roozerball-rules-to-implement.md`](roozerball-rules-to-implement.md) already recommends **Godot Engine** as the long-term target. Key graphics gains:
+
+| Enhancement | Description |
+|---|---|
+| **2D scene graph** | Each figure, the ball, markers, and UI panels become individual nodes with transforms, collision shapes, and animation players. |
+| **Tilemap / radial grid** | Custom radial tilemap shader for the 12-sector × 5-ring track with per-tile incline shading. |
+| **Skeletal animation** | 2D skeleton rigs for skater/biker figures — smooth run cycles, combat swings, falls, and stand-up sequences. |
+| **Shader effects** | GLSL shaders for ball heat glow, speed lines on fast-moving figures, goal-flash celebrations, and ring-incline gradients. |
+| **3D isometric view** | Optional 3D camera looking down at the banked track at an angle, showing the physical incline of the rings. |
+| **Particle systems** | GPU-accelerated particles for cannon sparks, motorcycle exhaust, dust clouds on falls, and crowd confetti on goals. |
+| **UI / HUD** | Godot's Control nodes for score overlays, stat panels, dice-roll popups, and replay timelines — fully themeable. |
+| **Web export** | One-click HTML5 build for browser play with no install required. |
+
+### Tier 4 — Full 3D (Godot 3D / Unreal / Unity)
+
+For a premium visual experience down the road:
+
+- **3D banked track** — modelled circular arena with physical incline, crowd stands, and a central cannon turret
+- **Ragdoll physics** — figures tumble realistically on knockdowns, swoops, and motorcycle crashes
+- **Broadcast camera** — TV-style camera angles (overhead, trackside, goal-cam) with smooth transitions
+- **Weather / atmosphere** — night matches with floodlights, rain on the track surface, pyrotechnics for goals
+- **VR spectator mode** — watch the match from a virtual seat in the arena
