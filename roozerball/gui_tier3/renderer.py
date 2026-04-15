@@ -315,7 +315,15 @@ class BoardRenderer:
         radius: int,
         width: int = 0,
     ) -> None:
-        """Draw a circle normally, or a Y-compressed ellipse in isometric mode."""
+        """Draw a circle, or a Y-compressed ellipse in isometric mode.
+
+        Args:
+            surface: Target pygame surface.
+            color: RGB or RGBA colour tuple.
+            center: (x, y) screen-space centre pixel.
+            radius: Circle radius in pixels (horizontal axis for iso).
+            width: Border width (0 = filled).
+        """
         if radius < 1:
             return
         if self.isometric:
