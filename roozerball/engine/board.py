@@ -412,19 +412,40 @@ class Board:
         """All squares reachable with given movement points. Returns (square, cost) pairs.
 
         Uses BFS. Cannon track excluded for normal movement (Rule C7).
+        Biker constraints: E3 (first-square-straight), E7 (90-degree turning).
         """
         from collections import deque
+        from roozerball.engine.constants import BIKE_MAX_TURN_SPEED
 
-        visited: Dict[int, int] = {}   # id(square) -> min cost
-        queue = deque([(from_square, 0)])
+        is_biker = figure_type == FigureType.BIKER
+
+        # BFS state: (square, cost, last_changed_ring)
+        visited: Dict[int, int] = {}   # id(square) -> min cost (ring-change state tracked in queue only)
+        queue = deque([(from_square, 0, False)])
         visited[id(from_square)] = 0
         results: List[Tuple[Square, int]] = []
 
         while queue:
-            sq, cost = queue.popleft()
+            sq, cost, last_changed_ring = queue.popleft()
             for adj in self._counterclockwise_adjacent_squares(sq):
                 if adj.ring == Ring.CANNON:
                     continue  # Rule C7
+
+                # E3: biker first step must be same ring + next sector counterclockwise
+                if is_biker and cost == 0:
+                    next_sector = (sq.sector_index + 1) % 12
+                    if not (adj.ring == sq.ring and adj.sector_index == next_sector):
+                        continue
+
+                this_changes_ring = adj.ring != sq.ring
+
+                # E7: biker turning constraints based on speed
+                if is_biker and this_changes_ring:
+                    if movement_points > BIKE_MAX_TURN_SPEED:
+                        continue  # no ring changes at high speed
+                    if last_changed_ring:
+                        continue  # no consecutive ring changes at any speed
+
                 step_cost = 1
                 if adj.ring.value > sq.ring.value:
                     step_cost = 2  # uphill base cost
@@ -433,7 +454,7 @@ class Board:
                     sq_id = id(adj)
                     if sq_id not in visited or visited[sq_id] > new_cost:
                         visited[sq_id] = new_cost
-                        queue.append((adj, new_cost))
+                        queue.append((adj, new_cost, this_changes_ring))
                         results.append((adj, new_cost))
 
         return results

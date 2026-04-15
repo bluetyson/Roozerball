@@ -60,6 +60,13 @@ class Figure:
     man_to_man_drift: int = 0
     upper_hand: bool = False
 
+    # Per-turn tracking for rule enhancements
+    opted_out_of_combat: bool = False        # G13: optional fighting
+    swooped_this_turn: bool = False          # G39: swoop tracking
+    moved_from_ring: Optional[Ring] = None   # G39: track ring before movement
+    entered_field_this_turn: bool = False     # E6: entered field this turn
+    consecutive_turns_fixing: int = 0        # E18: bike repair counter
+
     # Ball tracking (A8-A9)
     laps_completed: int = 0
     activation_sector: Optional[int] = None
@@ -192,6 +199,10 @@ class Figure:
         self.has_scored_attempt = False
         self.tow_distance_this_turn = 0
         self.released_tow_bar_this_turn = False
+        self.opted_out_of_combat = False
+        self.swooped_this_turn = False
+        self.moved_from_ring = None
+        self.entered_field_this_turn = False
 
     def advance_timers(self) -> None:
         """Reduce penalty/shaken/rest timers by 1 (Rule T1)."""
@@ -258,6 +269,13 @@ class Biker(Figure):
         self.figure_type = FigureType.BIKER
         self.base_speed = BIKE_MIN_SPEED
         super().__post_init__()
+
+    def reset_turn(self) -> None:
+        """Clear per-turn flags; transition feet_down → entered_field_this_turn."""
+        was_feet_down = self.feet_down
+        super().reset_turn()
+        if was_feet_down:
+            self.entered_field_this_turn = True
 
     @property
     def speed(self) -> int:
