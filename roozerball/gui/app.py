@@ -1228,7 +1228,6 @@ class RoozerballApp(tk.Tk if tk is not None else object):
             if new_scores.get(name, 0) > old_scores.get(name, 0):
                 self._emit_goal_particles()
                 break
-        self._check_and_announce_game_over()
 
     def clear_selection(self) -> None:
         self.selected_figure = None
