@@ -373,9 +373,9 @@ class BoardRenderer:
         z = self.camera.zoom
         icx, icy = int(cx), int(cy)
 
-        # Crowd / stands gradient
+        # Crowd / stands gradient (base radius 316 keeps stands within window)
         for i in range(4, -1, -1):
-            r = int((360 + i * 15) * z)
+            r = int((316 + i * 15) * z)
             if r < 1:
                 continue
             pygame.draw.circle(surface, CROWD_SHADES[i], (icx, icy), r)

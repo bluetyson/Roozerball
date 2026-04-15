@@ -301,7 +301,39 @@ class BoardRenderer:
             anim.update(dt_ms)
 
     def _w2s(self, wx: float, wy: float) -> Tuple[float, float]:
-        return self.camera.world_to_screen(wx, wy)
+        sx, sy = self.camera.world_to_screen(wx, wy)
+        if self.isometric:
+            _, board_sy = self.camera.world_to_screen(BOARD_CX, BOARD_CY)
+            sy = board_sy + (sy - board_sy) * ISO_TILT
+        return sx, sy
+
+    def _circle(
+        self,
+        surface: pygame.Surface,
+        color: tuple,
+        center: Tuple[int, int],
+        radius: int,
+        width: int = 0,
+    ) -> None:
+        """Draw a circle, or a Y-compressed ellipse in isometric mode.
+
+        Args:
+            surface: Target pygame surface.
+            color: RGB or RGBA colour tuple.
+            center: (x, y) screen-space centre pixel.
+            radius: Circle radius in pixels (horizontal axis for iso).
+            width: Border width (0 = filled).
+        """
+        if radius < 1:
+            return
+        if self.isometric:
+            ry = max(1, int(radius * ISO_TILT))
+            rect = pygame.Rect(
+                center[0] - radius, center[1] - ry, radius * 2, ry * 2,
+            )
+            pygame.draw.ellipse(surface, color, rect, width)
+        else:
+            pygame.draw.circle(surface, color, center, radius, width)
 
     def draw(
         self,
@@ -338,12 +370,12 @@ class BoardRenderer:
         z = self.camera.zoom
         icx, icy = int(cx), int(cy)
 
-        # Crowd / stands with gradient
+        # Crowd / stands with gradient (base radius 320 keeps stands within window)
         for i in range(len(CROWD_SHADES) - 1, -1, -1):
-            r = int((370 + i * 14) * z)
+            r = int((320 + i * 14) * z)
             if r < 1:
                 continue
-            pygame.draw.circle(surface, CROWD_SHADES[i], (icx, icy), r)
+            self._circle(surface, CROWD_SHADES[i], (icx, icy), r)
 
         # Ring fills
         for ring in [Ring.CANNON, Ring.UPPER, Ring.MIDDLE, Ring.LOWER, Ring.FLOOR]:
@@ -351,31 +383,48 @@ class BoardRenderer:
             ro = int(outer * z)
             if ro < 1:
                 continue
-            pygame.draw.circle(surface, RING_FILLS[ring], (icx, icy), ro)
+            self._circle(surface, RING_FILLS[ring], (icx, icy), ro)
 
         # Central area with subtle glow
         floor_inner = int(RING_RADII[Ring.FLOOR][0] * z)
         if floor_inner > 0:
-            pygame.draw.circle(surface, CENTRAL_FILL, (icx, icy), floor_inner)
+            self._circle(surface, CENTRAL_FILL, (icx, icy), floor_inner)
             # Glow ring at center edge
             glow_r = floor_inner + int(3 * z)
             if glow_r > floor_inner:
-                glow_surf = pygame.Surface(
-                    (glow_r * 2 + 4, glow_r * 2 + 4), pygame.SRCALPHA,
-                )
-                pygame.draw.circle(
-                    glow_surf,
-                    (*CENTRAL_GLOW, 40),
-                    (glow_r + 2, glow_r + 2),
-                    glow_r,
-                    max(1, int(3 * z)),
-                )
-                surface.blit(
-                    glow_surf,
-                    (icx - glow_r - 2, icy - glow_r - 2),
-                    special_flags=pygame.BLEND_ADD,
-                )
-            pygame.draw.circle(surface, LANE_LINE, (icx, icy), floor_inner, 1)
+                if self.isometric:
+                    glow_ry = max(1, int(glow_r * ISO_TILT))
+                    glow_surf = pygame.Surface(
+                        (glow_r * 2 + 4, glow_ry * 2 + 4), pygame.SRCALPHA,
+                    )
+                    pygame.draw.ellipse(
+                        glow_surf,
+                        (*CENTRAL_GLOW, 40),
+                        pygame.Rect(2, 2, glow_r * 2, glow_ry * 2),
+                        max(1, int(3 * z)),
+                    )
+                    surface.blit(
+                        glow_surf,
+                        (icx - glow_r - 2, icy - glow_ry - 2),
+                        special_flags=pygame.BLEND_ADD,
+                    )
+                else:
+                    glow_surf = pygame.Surface(
+                        (glow_r * 2 + 4, glow_r * 2 + 4), pygame.SRCALPHA,
+                    )
+                    pygame.draw.circle(
+                        glow_surf,
+                        (*CENTRAL_GLOW, 40),
+                        (glow_r + 2, glow_r + 2),
+                        glow_r,
+                        max(1, int(3 * z)),
+                    )
+                    surface.blit(
+                        glow_surf,
+                        (icx - glow_r - 2, icy - glow_r - 2),
+                        special_flags=pygame.BLEND_ADD,
+                    )
+            self._circle(surface, LANE_LINE, (icx, icy), floor_inner, 1)
 
         # Lane divider lines (brighter on inner edge)
         for ring in Ring:
@@ -383,9 +432,9 @@ class BoardRenderer:
             ri = int(inner * z)
             ro = int(outer * z)
             if ro > 1:
-                pygame.draw.circle(surface, LANE_LINE, (icx, icy), ro, 1)
+                self._circle(surface, LANE_LINE, (icx, icy), ro, 1)
             if ri > 1:
-                pygame.draw.circle(surface, LANE_LINE_BRIGHT, (icx, icy), ri, 1)
+                self._circle(surface, LANE_LINE_BRIGHT, (icx, icy), ri, 1)
 
     # --- Squares ---
 
@@ -456,24 +505,45 @@ class BoardRenderer:
             if mid_r < 2:
                 continue
 
-            grad_surf = pygame.Surface(
-                (ro * 2 + 4, ro * 2 + 4), pygame.SRCALPHA,
-            )
-            # Draw a subtle radial brightness boost on the inner edge
             alpha = AMBIENT_GLOW_ALPHA
             grad_color = RING_GRADIENT_INNER.get(ring, (40, 50, 70))
-            pygame.draw.circle(
-                grad_surf,
-                (*grad_color, alpha),
-                (ro + 2, ro + 2),
-                mid_r,
-                max(1, (ro - ri) // 2),
-            )
-            surface.blit(
-                grad_surf,
-                (icx - ro - 2, icy - ro - 2),
-                special_flags=pygame.BLEND_ADD,
-            )
+            if self.isometric:
+                ro_y = max(1, int(ro * ISO_TILT))
+                mid_ry = max(1, int(mid_r * ISO_TILT))
+                grad_surf = pygame.Surface(
+                    (ro * 2 + 4, ro_y * 2 + 4), pygame.SRCALPHA,
+                )
+                pygame.draw.ellipse(
+                    grad_surf,
+                    (*grad_color, alpha),
+                    pygame.Rect(
+                        ro + 2 - mid_r, ro_y + 2 - mid_ry,
+                        mid_r * 2, mid_ry * 2,
+                    ),
+                    max(1, (ro - ri) // 2),
+                )
+                surface.blit(
+                    grad_surf,
+                    (icx - ro - 2, icy - ro_y - 2),
+                    special_flags=pygame.BLEND_ADD,
+                )
+            else:
+                grad_surf = pygame.Surface(
+                    (ro * 2 + 4, ro * 2 + 4), pygame.SRCALPHA,
+                )
+                # Draw a subtle radial brightness boost on the inner edge
+                pygame.draw.circle(
+                    grad_surf,
+                    (*grad_color, alpha),
+                    (ro + 2, ro + 2),
+                    mid_r,
+                    max(1, (ro - ri) // 2),
+                )
+                surface.blit(
+                    grad_surf,
+                    (icx - ro - 2, icy - ro - 2),
+                    special_flags=pygame.BLEND_ADD,
+                )
 
     # --- Lighting (enhanced spotlight with soft edge) ---
 

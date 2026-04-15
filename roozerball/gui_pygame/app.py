@@ -57,7 +57,10 @@ class PygameApp:
     def __init__(self, game: Optional[Game] = None) -> None:
         pygame.init()
         pygame.display.set_caption("Roozerball — Tier 2 (Pygame)")
-        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+        _flags = pygame.RESIZABLE
+        if hasattr(pygame, "SCALED"):
+            _flags |= pygame.SCALED  # auto-scales to fit any screen size (pygame 2+)
+        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), _flags)
         self.clock = pygame.time.Clock()
         self.running = True
 

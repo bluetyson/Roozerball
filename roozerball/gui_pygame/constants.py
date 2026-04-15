@@ -21,7 +21,7 @@ FPS = 60
 # Board geometry (matches Tkinter version)
 # ---------------------------------------------------------------------------
 BOARD_CX = 430
-BOARD_CY = 380
+BOARD_CY = 440
 
 RING_RADII: dict[Ring, tuple[int, int]] = {
     Ring.FLOOR:  (40, 90),

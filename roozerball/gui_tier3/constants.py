@@ -23,7 +23,7 @@ WINDOW_TITLE = "Roozerball — Tier 3 (Enhanced Pygame)"
 # Board geometry
 # ---------------------------------------------------------------------------
 BOARD_CX = 430
-BOARD_CY = 400
+BOARD_CY = 460
 
 RING_RADII: dict[Ring, tuple[int, int]] = {
     Ring.FLOOR:  (45, 95),
