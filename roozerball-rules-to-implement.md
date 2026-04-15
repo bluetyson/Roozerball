@@ -367,11 +367,11 @@ Alternative considered: Pygame (Python) — good for 2D board games and matches 
 
 ### Season Play
 
-- [ ] **H10. Season structure** — 10-game season + playoffs/championship
-- [ ] **H11. Between games** — Empty slots filled; damaged cycles repaired/replaced; badly injured out for half season
-- [ ] **H12. Replacement figures** — Same type; stats generated with die roll; 4 teambuilding points per entire season
-- [ ] **H13. Season stat progression** — Surviving figure who played ≥50% of games: +1 to any stat (except speed) up to max; league leader (most points or kills): +1 to two stats
-- [ ] **H14. Next season** — 6 new points for replacements; 10-year veteran may retire; if continues: speed -1 per season, all stats -1 per season
+- [x] **H10. Season structure** — 10-game season + playoffs/championship *(implemented in `roozerball/engine/season.py` — `Season`, `SeasonRecord`, playoff seeding)*
+- [x] **H11. Between games** — Empty slots filled; damaged cycles repaired/replaced; badly injured out for half season *(implemented in `season.py` — `Season.between_games()`)*
+- [x] **H12. Replacement figures** — Same type; stats generated with die roll; 4 teambuilding points per entire season *(implemented in `season.py` — `Season.generate_replacement()`)*
+- [x] **H13. Season stat progression** — Surviving figure who played ≥50% of games: +1 to any stat (except speed) up to max; league leader (most points or kills): +1 to two stats *(implemented in `season.py` — `Season.apply_stat_progression()`)*
+- [x] **H14. Next season** — 6 new points for replacements; 10-year veteran may retire; if continues: speed -1 per season, all stats -1 per season *(implemented in `season.py` — `Season.advance_to_next_season()`)*
 
 ---
 
