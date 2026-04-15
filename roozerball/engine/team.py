@@ -9,10 +9,40 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from roozerball.engine.constants import (
-    FigureType, TeamSide, STAT_MAX, TEAM_BUILDING_POINTS,
+    FigureType, TeamSide, Ring, STAT_MAX, TEAM_BUILDING_POINTS,
     MAX_FIGURES_PER_TEAM, MAX_SKATERS, MAX_CATCHERS, MAX_BIKERS,
 )
 from roozerball.engine.figures import Figure, Biker
+
+
+@dataclass
+class StretcherBearer:
+    """H1: Stretcher bearer stub — data model and placeholder.
+
+    Properties:
+    - 2 slots required (pair of bearers)
+    - Move 3 squares per turn, always move last in their sector
+    - Can travel any direction (including clockwise)
+    - Takes 1 turn to pick up an injured figure
+    """
+
+    team: TeamSide
+    name: str = "Stretcher Bearer"
+    speed: int = 3
+    slots_required: int = 2
+    moves_last: bool = True
+    can_move_clockwise: bool = True
+    pickup_turns_required: int = 1
+    is_carrying_injured: bool = False
+    carried_figure: Optional[Figure] = None
+    sector_index: Optional[int] = None
+    ring: Optional[Ring] = None
+    square_position: Optional[int] = None
+    slot_index: Optional[int] = None
+    has_moved: bool = False
+
+    def reset_turn(self) -> None:
+        self.has_moved = False
 
 
 @dataclass
