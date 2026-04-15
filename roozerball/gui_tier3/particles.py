@@ -17,6 +17,7 @@ from roozerball.gui_tier3.constants import (
     PARTICLE_COUNT_DUST,
     PARTICLE_COUNT_EXHAUST,
     PARTICLE_COUNT_GOAL,
+    PARTICLE_DEFAULT_COLORS,
     PARTICLE_LIFETIME_MS,
     PARTICLE_TRAIL_LENGTH,
 )
@@ -84,9 +85,7 @@ class ParticleSystem:
     ) -> None:
         """Emit *count* particles from (*x*, *y*)."""
         if colors is None:
-            colors = [
-                (255, 200, 50), (255, 130, 30), (240, 70, 70), (255, 255, 255),
-            ]
+            colors = list(PARTICLE_DEFAULT_COLORS)
         half_spread = spread / 2
         for _ in range(count):
             angle = direction + _rng.uniform(-half_spread, half_spread)

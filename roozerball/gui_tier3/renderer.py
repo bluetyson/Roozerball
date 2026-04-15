@@ -66,11 +66,15 @@ from roozerball.gui_tier3.constants import (
     ISO_TILT,
     LANE_LINE,
     LANE_LINE_BRIGHT,
+    NUM_TRACK_SECTORS,
     RING_BRIGHTNESS,
     RING_FILLS,
     RING_GRADIENT_INNER,
     RING_RADII,
     SHADOW_LENGTH_FACTOR,
+    SHIMMER_AMPLITUDE,
+    SHIMMER_BASELINE,
+    SHIMMER_FREQUENCY,
     SLOT_OFFSETS,
     SPEED_LINE_ALPHA,
     SPEED_LINE_COUNT,
@@ -146,8 +150,8 @@ class Camera:
         if self._locked_sector is not None:
             angle = (
                 -math.pi / 2
-                + self._locked_sector * (2 * math.pi / 12)
-                + math.pi / 12
+                + self._locked_sector * (2 * math.pi / NUM_TRACK_SECTORS)
+                + math.pi / NUM_TRACK_SECTORS
             )
             dist = 200
             self._target_x = -(BOARD_CX + math.cos(angle) * dist - BOARD_CX)
@@ -171,7 +175,7 @@ class Camera:
 
 def _square_center(square: Any) -> Tuple[float, float]:
     inner, outer = RING_RADII[square.ring]
-    sector_span = 2 * math.pi / 12
+    sector_span = 2 * math.pi / NUM_TRACK_SECTORS
     sector_start = -math.pi / 2 + square.sector_index * sector_span
     square_span = sector_span / SQUARES_PER_RING[square.ring]
     angle = sector_start + square_span * (square.position + 0.5)
@@ -388,8 +392,8 @@ class BoardRenderer:
     def _draw_squares(self, surface: pygame.Surface, game: Any) -> None:
         z = self.camera.zoom
         for sector_index, sector in enumerate(game.board.sectors):
-            base_start = -math.pi / 2 + sector_index * (2 * math.pi / 12)
-            sector_span = 2 * math.pi / 12
+            base_start = -math.pi / 2 + sector_index * (2 * math.pi / NUM_TRACK_SECTORS)
+            sector_span = 2 * math.pi / NUM_TRACK_SECTORS
             for ring in Ring:
                 inner_r, outer_r = RING_RADII[ring]
                 sq_count = SQUARES_PER_RING[ring]
@@ -823,8 +827,8 @@ class BoardRenderer:
             # Direction based on sector angle (counter-clockwise movement)
             sector_angle = (
                 -math.pi / 2
-                + sq.sector_index * (2 * math.pi / 12)
-                + math.pi / 12
+                + sq.sector_index * (2 * math.pi / NUM_TRACK_SECTORS)
+                + math.pi / NUM_TRACK_SECTORS
             )
             trail_angle = sector_angle + math.pi  # behind the figure
 
@@ -888,7 +892,7 @@ class BoardRenderer:
             return
 
         # Heat shimmer (Tier 3) — animated glow that pulses
-        shimmer_phase = math.sin(self._time_accum * 0.004) * 0.3 + 0.7
+        shimmer_phase = math.sin(self._time_accum * SHIMMER_FREQUENCY) * SHIMMER_AMPLITUDE + SHIMMER_BASELINE
         shimmer_r = int(gr * (1.0 + shimmer_phase * 0.2))
         if shimmer_r > 2:
             shimmer_surf = pygame.Surface(

@@ -160,6 +160,9 @@ PARTICLE_COUNT_GOAL = 45
 PARTICLE_COUNT_EXHAUST = 3
 PARTICLE_COUNT_DUST = 6
 PARTICLE_TRAIL_LENGTH = 8
+PARTICLE_DEFAULT_COLORS: list[tuple[int, int, int]] = [
+    (255, 200, 50), (255, 130, 30), (240, 70, 70), (255, 255, 255),
+]
 
 # Camera
 CAMERA_LERP_SPEED = 0.06
@@ -204,6 +207,18 @@ SPEED_LINE_THRESHOLD = 5  # figures with SPD >= this get speed lines
 GOAL_FLASH_DURATION_MS = 1500
 GOAL_FLASH_ALPHA_MAX = 80
 GOAL_FLASH_COLOR = (255, 230, 50)
+
+# Ball shimmer animation parameters
+SHIMMER_FREQUENCY = 0.004
+SHIMMER_AMPLITUDE = 0.3
+SHIMMER_BASELINE = 0.7
+
+# Number of sectors on the track
+NUM_TRACK_SECTORS = 12
+
+# Text truncation limits
+MAX_LOG_ENTRY_LENGTH = 60
+MAX_ACTION_TEXT_LENGTH = 80
 
 # ---------------------------------------------------------------------------
 # Isometric perspective (optional pseudo-3D)

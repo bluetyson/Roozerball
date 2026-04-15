@@ -34,9 +34,11 @@ from roozerball.gui_tier3.constants import (
     FONT_SIZE_LABEL,
     FONT_SIZE_SMALL,
     FONT_SIZE_TITLE,
+    MAX_ACTION_TEXT_LENGTH,
     MAX_COMBAT_LINES,
     MAX_DICE_LOG,
     MAX_LOG_DISPLAY,
+    MAX_LOG_ENTRY_LENGTH,
     MODE_CVC,
     MODE_HVC,
     PANEL_BG,
@@ -469,7 +471,7 @@ class SidePanel:
         for entry in entries:
             if cy + line_h > remaining:
                 break
-            txt = font_body.render(entry[:60], True, TEXT_PRIMARY)
+            txt = font_body.render(entry[:MAX_LOG_ENTRY_LENGTH], True, TEXT_PRIMARY)
             clip.blit(txt, (6, cy))
             cy += line_h
 
@@ -536,7 +538,7 @@ class ControlBar:
 
         if self._last_action_text:
             act_font = _font(FONT_SIZE_SMALL)
-            display = self._last_action_text[:80]
+            display = self._last_action_text[:MAX_ACTION_TEXT_LENGTH]
             act_surf = act_font.render(display, True, TEXT_SECONDARY)
             surface.blit(
                 act_surf,
@@ -1182,7 +1184,7 @@ class PackFormationDialog(DialogBase):
             names = ", ".join(getattr(f, "name", "?") for f in pack)
             text = f"{mark} Pack {i + 1}: {names}"
             color = TEXT_HIGHLIGHT if self._checks[i] else TEXT_PRIMARY
-            txt = mono.render(text[:60], True, color)
+            txt = mono.render(text[:MAX_LOG_ENTRY_LENGTH], True, color)
             surface.blit(txt, (self.x + 28, list_y + i * lh))
 
 
