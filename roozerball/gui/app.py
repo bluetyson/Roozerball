@@ -10,10 +10,12 @@ from roozerball.engine.team import Team
 
 try:
     import tkinter as tk
-    from tkinter import ttk
+    from tkinter import filedialog, messagebox, ttk
 except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
     tk = None
     ttk = None
+    filedialog = None
+    messagebox = None
     _TK_ERROR = exc
 else:
     _TK_ERROR = None
@@ -226,7 +228,7 @@ class RoozerballApp(tk.Tk if tk is not None else object):
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=0)
+        self.columnconfigure(1, weight=0, minsize=380)
         self.rowconfigure(1, weight=1)
 
         # ---- Top control bar ----
@@ -246,6 +248,22 @@ class RoozerballApp(tk.Tk if tk is not None else object):
         self._mode_label = ttk.Label(controls, text=f"Mode: {self.game_mode}",
                                      font=("Helvetica", 9), foreground="#6b7280")
         self._mode_label.grid(row=0, column=4, padx=12)
+
+        # Top-right: scoreboard + last phase action
+        top_right = ttk.Frame(controls)
+        top_right.grid(row=0, column=5, sticky="e", padx=(8, 4))
+        top_right.columnconfigure(0, weight=1)
+
+        self._top_score_var = tk.StringVar(value="")
+        ttk.Label(top_right, textvariable=self._top_score_var,
+                  font=("Helvetica", 10, "bold"), foreground="#f9fafb").grid(
+            row=0, column=0, sticky="e")
+
+        self._last_action_var = tk.StringVar(value="")
+        ttk.Label(top_right, textvariable=self._last_action_var,
+                  font=("Helvetica", 9), foreground="#d1d5db",
+                  wraplength=450, justify="right").grid(
+            row=1, column=0, sticky="e")
 
         # ---- Right panel ----
         summary = ttk.Frame(self, padding=8)
@@ -303,11 +321,13 @@ class RoozerballApp(tk.Tk if tk is not None else object):
         log_frame.grid(row=5, column=0, sticky="nsew", pady=(8, 0))
         log_frame.rowconfigure(0, weight=1)
         log_frame.columnconfigure(0, weight=1)
-        self.log_list = tk.Listbox(log_frame, height=16)
+        self.log_list = tk.Listbox(log_frame, height=16, width=50, font=("Courier", 9))
         self.log_list.grid(row=0, column=0, sticky="nsew")
         log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_list.yview)
         log_scroll.grid(row=0, column=1, sticky="ns")
         self.log_list.configure(yscrollcommand=log_scroll.set)
+        ttk.Button(log_frame, text="Save Log", command=self._save_log).grid(
+            row=1, column=0, sticky="w", pady=(4, 0))
 
         # ---- Board canvas ----
         board_frame = ttk.LabelFrame(self, text="Board", padding=8)
@@ -381,6 +401,34 @@ class RoozerballApp(tk.Tk if tk is not None else object):
         result = r1 + r2
         _log_dice(f"Manual 2d6 [{r1}+{r2}]", result)
         self._refresh_dice_log()
+
+    def _save_log(self) -> None:
+        """Save the current replay log to a text file."""
+        path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            title="Save Replay Log",
+        )
+        if not path:
+            return
+        try:
+            snapshot = self.game.snapshot()
+            scores = snapshot["scores"]
+            score_text = " | ".join(f"{name}: {score}" for name, score in scores.items())
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("Roozerball Game Replay Log\n")
+                fh.write(
+                    f"Period {snapshot['period']} · "
+                    f"Time {snapshot['time_remaining']}:00 · "
+                    f"Turn {snapshot['turn']}\n"
+                )
+                fh.write(f"Scores: {score_text}\n")
+                fh.write("=" * 60 + "\n")
+                for entry in self.game.log:
+                    fh.write(entry + "\n")
+            messagebox.showinfo("Saved", f"Log saved to:\n{path}")
+        except OSError as exc:
+            messagebox.showerror("Error", f"Could not save log:\n{exc}")
 
     # -----------------------------------------------------------------------
     # Phase controls
@@ -478,6 +526,16 @@ class RoozerballApp(tk.Tk if tk is not None else object):
                 penalty_lines.append(f"{team.name}: " + ", ".join(entries))
         self.penalty_var.set("\n".join(penalty_lines) if penalty_lines else "No figures in the box")
         self.combat_var.set(self._latest_combat_summary())
+
+        # Top-right scoreboard and last phase action
+        self._top_score_var.set(score_text)
+        result = self.game.last_phase_result
+        if result is not None and result.messages:
+            phase_name = result.phase.value.replace("_", " ").title()
+            last_msg = result.messages[-1]
+            self._last_action_var.set(f"[{phase_name}] {last_msg}")
+        else:
+            self._last_action_var.set("")
 
     def _refresh_log(self) -> None:
         self.log_list.delete(0, tk.END)
