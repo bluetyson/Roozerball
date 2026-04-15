@@ -2,11 +2,37 @@
 
 Coordinates the existing engine modules into a playable turn loop with
 phase-by-phase progression and simple built-in computer control.
+
+Human-interactive callbacks
+---------------------------
+The following optional callbacks allow a GUI or other front-end to
+intercept decisions that the built-in AI would otherwise make
+automatically.  When a callback is ``None`` (the default), the engine
+falls back to its existing heuristic.
+
+* ``human_movement_callback`` — called with ``(figure, current_square,
+  options)`` where *options* is ``List[tuple[Square, int]]``
+  (destination, cost).  Must return the chosen ``Square`` or ``None``
+  to skip.
+* ``human_combat_target_callback`` — called with ``(attacker, opponents)``
+  where *opponents* is ``List[Figure]``.  Must return the chosen
+  ``Figure`` or ``None`` for AI default.
+* ``human_escalate_callback`` — called after an INDECISIVE brawl with
+  ``(figure, opponent)``; return ``True`` to escalate to man-to-man.
+* ``human_tow_bar_callback`` — called with ``(biker, candidates)``
+  where *candidates* is ``List[Figure]``; return a list of skaters to
+  attach (max 3 total) or ``None`` for AI default.
+* ``human_scoring_callback`` — called with ``(shooter, modifiers)``
+  where *modifiers* is ``List[tuple[str, int]]``; return ``True`` to
+  attempt the shot, ``False`` to continue circling.
+* ``human_pack_callback`` — called with ``(packs)`` where *packs* is
+  ``List[List[Figure]]``; return the chosen pack indices to form or
+  ``None`` for AI default.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from roozerball.engine import dice
 from roozerball.engine.ball import Ball
@@ -86,6 +112,26 @@ class Game:
         self.log: List[str] = []
         self.turn_penalties: List[PenaltyEvent] = []
         self.last_phase_result: Optional[PhaseResult] = None
+
+        # Human-interactive callbacks (None → AI default)
+        self.human_movement_callback: Optional[
+            Callable[[Any, "Square", List[tuple["Square", int]]], Optional["Square"]]
+        ] = None
+        self.human_combat_target_callback: Optional[
+            Callable[[Any, List[Any]], Optional[Any]]
+        ] = None
+        self.human_escalate_callback: Optional[
+            Callable[[Any, Any], bool]
+        ] = None
+        self.human_tow_bar_callback: Optional[
+            Callable[[Any, List[Any]], Optional[List[Any]]]
+        ] = None
+        self.human_scoring_callback: Optional[
+            Callable[[Any, List[tuple[str, int]]], bool]
+        ] = None
+        self.human_pack_callback: Optional[
+            Callable[[List[List[Any]]], Optional[List[int]]]
+        ] = None
 
         self.setup_match()
 
@@ -400,7 +446,13 @@ class Game:
                         swooped_squares.add(id(square))
                         break
 
-                    target = max(opponents, key=lambda f: getattr(f, 'combat', 0))
+                    # Select swoop target — human callback or AI default
+                    target = None
+                    if (self.human_combat_target_callback is not None
+                            and getattr(figure, 'team', None) == TeamSide.HOME):
+                        target = self.human_combat_target_callback(figure, opponents)
+                    if target is None:
+                        target = max(opponents, key=lambda f: getattr(f, 'combat', 0))
                     valid, reason = validate_swoop(figure, target, board=self.board)
                     if not valid:
                         continue
@@ -483,6 +535,22 @@ class Game:
                 opp for opp in square.figures_in_square()
                 if opp.team != figure.team and opp.is_standing
             ])
+
+            # Human scoring callback — let the player decide whether to shoot
+            if (self.human_scoring_callback is not None
+                    and getattr(figure, 'team', None) == TeamSide.HOME):
+                from roozerball.engine.scoring import calculate_scoring_modifiers
+                modifiers = calculate_scoring_modifiers(
+                    figure,
+                    standing_opponents=standing_opponents,
+                    distance=0,
+                )
+                if not self.human_scoring_callback(figure, modifiers):
+                    messages.append(
+                        f"{figure.name} holds the ball, choosing not to shoot this turn."
+                    )
+                    continue
+
             messages.append(
                 f"--- Scoring attempt: {figure.name} ({figure.team.value}) "
                 f"in goal square (opponents in square: {standing_opponents}) ---"
@@ -532,8 +600,24 @@ class Game:
         return PhaseResult(Phase.SCORING, messages)
 
     def choose_movement_destination(self, figure: Any, current_square: Square) -> Optional[Square]:
-        """Choose a simple AI destination for a figure."""
-        reachable = [square for square, _ in self._movement_options_with_costs(figure, current_square)]
+        """Choose a destination for *figure*.
+
+        When ``human_movement_callback`` is set and *figure* belongs to
+        the home team (the human side in HvC), the callback is invoked
+        so the player can pick.  Otherwise the built-in AI heuristic is
+        used.
+        """
+        options = self._movement_options_with_costs(figure, current_square)
+        if not options:
+            return None
+
+        # Try human callback for home-side figures
+        if self.human_movement_callback is not None and getattr(figure, 'team', None) == TeamSide.HOME:
+            result = self.human_movement_callback(figure, current_square, options)
+            if result is not None:
+                return result
+
+        reachable = [square for square, _ in options]
         if not reachable:
             return None
 
@@ -1305,6 +1389,14 @@ class Game:
         messages.append(f"{skater.name} releases tow bar.")
         return messages
 
+    def detach_tow_bar(self, skater: Any) -> List[str]:
+        """Public API for GUI to release a tow bar on demand."""
+        return self._detach_tow_bar(skater)
+
+    def attach_tow_bar(self, biker: Any, skater: Any) -> List[str]:
+        """Public API for GUI to grab a tow bar on demand."""
+        return self._attach_tow_bar(biker, skater)
+
     # -----------------------------------------------------------------------
     # E15-E18: Crash triggers
     # -----------------------------------------------------------------------
@@ -1501,6 +1593,7 @@ class Game:
         if len(getattr(biker, 'towing', [])) >= 3:
             return messages
         team = getattr(biker, 'team', None)
+        candidates = []
         for fig in current_square.figures_in_square():
             if fig is biker:
                 continue
@@ -1513,6 +1606,20 @@ class Game:
             if getattr(fig, 'is_towed', False):
                 continue
             if not fig.is_standing:
+                continue
+            candidates.append(fig)
+
+        if not candidates:
+            return messages
+
+        # Human callback for tow bar selection
+        chosen = None
+        if self.human_tow_bar_callback is not None and team == TeamSide.HOME:
+            chosen = self.human_tow_bar_callback(biker, candidates)
+
+        attach_list = chosen if chosen is not None else candidates
+        for fig in attach_list:
+            if fig not in candidates:
                 continue
             messages.extend(self._attach_tow_bar(biker, fig))
             if len(biker.towing) >= 3:
