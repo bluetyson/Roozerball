@@ -1,6 +1,8 @@
 # Roozerball
 
-A fully-implemented Python engine and Tkinter desktop GUI for **Roozerball** — the over-the-top Australian full-contact roller-skating sport from J. P. Trostle's tabletop game (©2010). Teams of skaters, catchers, and motorcyclists battle on a circular inclined track to fire a steel ball through the opposing goal.
+A fully-implemented Python engine with **two desktop GUIs** for **Roozerball** — the over-the-top Australian full-contact roller-skating sport from J. P. Trostle's tabletop game (©2010). Teams of skaters, catchers, and motorcyclists battle on a circular inclined track to fire a steel ball through the opposing goal.
+
+The **Tier 2 Pygame GUI** (recommended) provides hardware-accelerated rendering, animated sprites, a camera system with smooth scrolling, incline lighting with shadows, and a spotlight on the ball carrier. The original **Tier 1 Tkinter GUI** remains available as a dependency-free fallback.
 
 ---
 
@@ -34,9 +36,8 @@ All rules from the official Roozerball rulebook are implemented. The full checkl
 ## Requirements
 
 - **Python 3.11+** (modern type-hint syntax is used throughout)
-- **Tkinter** — included with most Python distributions; see below if missing
-
-No third-party packages are required.
+- **Pygame 2.x** — for the Tier 2 GUI (`pip install pygame`)
+- **Tkinter** *(optional)* — included with most Python distributions; only needed for the Tier 1 fallback GUI
 
 ---
 
@@ -50,11 +51,12 @@ python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
 python -m pip install --upgrade pip
+pip install pygame               # Required for the Tier 2 GUI
 ```
 
-### Tkinter on Linux
+### Tkinter on Linux (Tier 1 fallback only)
 
-If Tkinter is not bundled with your Python install:
+If you want to use the original Tkinter GUI and Tkinter is not bundled with your Python install:
 
 ```bash
 # Debian / Ubuntu
@@ -72,6 +74,27 @@ Then re-activate the venv and run normally.
 ---
 
 ## Running the GUI
+
+### Tier 2 — Pygame (recommended)
+
+```bash
+python -m roozerball.gui_pygame
+```
+
+The Pygame window opens at 1500 × 900 px with hardware-accelerated rendering, animated sprites, camera controls, incline lighting, and particle effects.
+
+**Keyboard shortcuts:**
+| Key | Action |
+|---|---|
+| `N` | Next Phase |
+| `P` | Play Turn |
+| `F` | Follow ball carrier (camera) |
+| `R` | Reset camera |
+| `Esc` | Cancel current interaction / skip movement |
+| Mouse wheel | Zoom in / out |
+| Right-click drag | Pan the board |
+
+### Tier 1 — Tkinter (fallback)
 
 ```bash
 python -m roozerball.gui
@@ -251,9 +274,15 @@ Roozerball/
 │   │   ├── team.py          # Team roster, lineup selection, substitution
 │   │   ├── season.py        # Season structure, stat progression, aging
 │   │   └── game.py          # Master game loop — all six turn phases
-│   └── gui/
-│       ├── app.py           # Tkinter application (board canvas, panels, dialogs)
-│       └── __main__.py      # Entry point: python -m roozerball.gui
+│   ├── gui/                 # Tier 1 — Tkinter GUI (fallback)
+│   │   ├── app.py           # Tkinter application (board canvas, panels, dialogs)
+│   │   └── __main__.py      # Entry point: python -m roozerball.gui
+│   └── gui_pygame/          # Tier 2 — Pygame GUI (recommended)
+│       ├── app.py           # Main game loop, event dispatch, callbacks
+│       ├── renderer.py      # Board, sprites, camera, particles, lighting
+│       ├── ui.py            # Side panels, dialog overlays, buttons
+│       ├── constants.py     # Pygame-specific colours, layout, animation params
+│       └── __main__.py      # Entry point: python -m roozerball.gui_pygame
 ├── tests/                   # 283-test regression suite
 ├── docs/
 │   └── Roozerball-rules.pdf # Source rules reference (©2010 J. P. Trostle)
@@ -333,27 +362,23 @@ The Computer vs Computer mode is fully playable and a good way to stress-test th
 
 ## Future Graphics Options
 
-The current GUI is built with **Tkinter** using procedural `Canvas` drawing — circles, polygons, and text. This is functional and dependency-free but limited in visual richness. Below are the main upgrade paths, roughly ordered from lowest to highest effort:
+The Tier 1 (Tkinter) and Tier 2 (Pygame) GUIs are both implemented. Below are the remaining upgrade paths:
 
-### Tier 1 — Stay in Python, enhance Tkinter
+### Tier 1 — Stay in Python, enhance Tkinter ✅ Complete
 
-| Enhancement | Description |
+Available via `python -m roozerball.gui`. Procedural sprites, smooth animation, particles, track texture, zoom & pan.
+
+### Tier 2 — Python 2D game framework (Pygame) ✅ Complete
+
+Available via `python -m roozerball.gui_pygame`. All Tier 2 enhancements implemented:
+
+| Enhancement | Status |
 |---|---|
-| **Sprites / images** | Replace drawn circles with PNG sprite sheets for skaters, catchers, bikers, and the ball. Tkinter's `PhotoImage` (or Pillow for JPEG/WebP) supports this without extra frameworks. |
-| **Smooth animation** | Use `canvas.move()` with `after()` callbacks to animate figure movement, ball flight, and combat knockbacks instead of instant redraws. |
-| **Particle effects** | Simple canvas-based particles for cannon fire, explosions, crashes, and goal celebrations using small coloured ovals with decay timers. |
-| **Track texture** | A pre-rendered background image of the inclined circular track (concrete, painted lines, crowd in the stands) drawn behind the interactive canvas layer. |
-| **Zoom & pan** | `canvas.scale()` plus mouse-wheel zoom and click-drag pan for inspecting crowded sectors. |
-
-### Tier 2 — Python 2D game framework (Pygame / Arcade)
-
-| Enhancement | Description |
-|---|---|
-| **Pygame migration** | Swap the Tkinter canvas for a Pygame `Surface`. Gains hardware-accelerated blitting, sprite groups, real-time animation loops, and mixer audio. The engine stays pure Python — only the rendering layer changes. |
-| **Arcade library** | Modern Python 2D alternative with OpenGL-backed rendering, built-in sprite lists, particle emitters, and camera viewports. Easier API than Pygame for new contributors. |
-| **Animated sprites** | Frame-by-frame sprite animation for skating strides, biker wheelies, catcher dives, brawl punches, and swoop attacks. |
-| **Camera system** | Follow the ball carrier or lock onto a chosen sector; smooth scroll between viewpoints. |
-| **Lighting / shadows** | Simulated incline lighting — upper-ring figures cast longer shadows; spotlight on the ball carrier. |
+| **Pygame migration** | ✅ Hardware-accelerated rendering with 60 FPS game loop |
+| **Animated sprites** | ✅ Frame-by-frame animation for idle, movement, and combat states with wobble/pulse effects |
+| **Camera system** | ✅ Follow ball carrier (`F`), lock sector, smooth scroll, zoom (`mouse wheel`), pan (`right-click drag`), reset (`R`) |
+| **Lighting / shadows** | ✅ Ring-brightness incline lighting, figure shadows proportional to ring height, additive spotlight on ball carrier |
+| **Particle system** | ✅ Pygame-native particles for cannon fire, crashes/knockdowns, and goal celebrations |
 
 ### Tier 3 — Dedicated game engine (Godot)
 
