@@ -479,6 +479,10 @@ class Game:
                 opp for opp in square.figures_in_square()
                 if opp.team != figure.team and opp.is_standing
             ])
+            messages.append(
+                f"--- Scoring attempt: {figure.name} ({figure.team.value}) "
+                f"in goal square (opponents in square: {standing_opponents}) ---"
+            )
             scoring_attempt = attempt_score(
                 shooter=figure,
                 standing_opponents=standing_opponents,
@@ -500,7 +504,12 @@ class Game:
             negated, negation_message = check_scoring_penalties(offense_penalties)
             if scoring_attempt.success and not negated:
                 self.team_for_side(figure.team).add_score(1)
-                messages.append(f"{figure.name} scores for {figure.team.value}!")
+                h = self.home_team.score
+                v = self.visitor_team.score
+                messages.append(
+                    f">>> GOAL! {figure.name} scores for {figure.team.value}! "
+                    f"[{self.home_team.name} {h} - {v} {self.visitor_team.name}] <<<"
+                )
                 self.ball.reset()
                 figure.drop_ball()
                 self.field_reset_pending = True

@@ -52,6 +52,13 @@ MAX_DICE_LOG = 20
 MODE_CVC = "Computer vs Computer"
 MODE_HVC = "Human vs Computer"
 
+# Canvas scoreboard overlay geometry
+_SCOREBOARD_RIGHT = 890
+_SCOREBOARD_TOP = 12
+_SCOREBOARD_WIDTH = 240
+_SCOREBOARD_LINE_HEIGHT = 18
+_SCOREBOARD_PADDING = 6
+
 
 # ---------------------------------------------------------------------------
 # GUI7 helper — dice roll log
@@ -256,12 +263,12 @@ class RoozerballApp(tk.Tk if tk is not None else object):
 
         self._top_score_var = tk.StringVar(value="")
         ttk.Label(top_right, textvariable=self._top_score_var,
-                  font=("Helvetica", 10, "bold"), foreground="#f9fafb").grid(
+                  font=("Helvetica", 10, "bold")).grid(
             row=0, column=0, sticky="e")
 
         self._last_action_var = tk.StringVar(value="")
         ttk.Label(top_right, textvariable=self._last_action_var,
-                  font=("Helvetica", 9), foreground="#d1d5db",
+                  font=("Helvetica", 9), foreground="#555555",
                   wraplength=450, justify="right").grid(
             row=1, column=0, sticky="e")
 
@@ -434,13 +441,41 @@ class RoozerballApp(tk.Tk if tk is not None else object):
     # Phase controls
     # -----------------------------------------------------------------------
 
+    def _announce_game_over(self) -> None:
+        """Show a game-over popup with the final result and scores."""
+        result = self.game.match_result()
+        scores = self.game.snapshot()["scores"]
+        score_text = " | ".join(f"{name}: {score}" for name, score in scores.items())
+        if result == "Draw":
+            messagebox.showinfo("Game Over", f"Match ended in a draw!\n\n{score_text}")
+        else:
+            messagebox.showinfo("Game Over", f"Winner: {result}!\n\n{score_text}")
+
+    def _check_and_announce_game_over(self) -> None:
+        """If the game just ended, show the game-over popup."""
+        if self.game.game_over:
+            self._announce_game_over()
+
+    def _warn_already_over(self) -> bool:
+        """Warn the user if the match is already finished. Returns True if over."""
+        if self.game.game_over:
+            messagebox.showinfo("Game Over", "The match has ended. Start a new match.")
+            return True
+        return False
+
     def next_phase(self) -> None:
+        if self._warn_already_over():
+            return
         self.game.advance_phase()
         self.refresh()
+        self._check_and_announce_game_over()
 
     def play_turn(self) -> None:
+        if self._warn_already_over():
+            return
         self.game.play_turn()
         self.refresh()
+        self._check_and_announce_game_over()
 
     def clear_selection(self) -> None:
         self.selected_figure = None
@@ -559,6 +594,54 @@ class RoozerballApp(tk.Tk if tk is not None else object):
         self._draw_highlights()
         self._draw_figures()
         self._draw_ball()
+        self._draw_canvas_scoreboard()
+
+    def _draw_canvas_scoreboard(self) -> None:
+        """Draw a score/clock overlay in the top-right corner of the canvas."""
+        snapshot = self.game.snapshot()
+        scores = snapshot["scores"]
+        names = list(scores.keys())
+        score_parts = [f"{name}: {scores[name]}" for name in names]
+        score_text = "  |  ".join(score_parts)
+        clock_text = (
+            f"Period {snapshot['period']}  ·  "
+            f"Turn {snapshot['turn']}  ·  "
+            f"{snapshot['time_remaining']}:00"
+        )
+        if self.game.game_over:
+            result = self.game.match_result()
+            status_text = "DRAW" if result == "Draw" else f"WINNER: {result}"
+        else:
+            status_text = ""
+
+        lines = 2 + (1 if status_text else 0)
+        box_h = lines * _SCOREBOARD_LINE_HEIGHT + _SCOREBOARD_PADDING * 2
+
+        right = _SCOREBOARD_RIGHT
+        top = _SCOREBOARD_TOP
+        box_w = _SCOREBOARD_WIDTH
+
+        self.canvas.create_rectangle(
+            right - box_w, top - _SCOREBOARD_PADDING, right + 4, top + box_h,
+            fill="#1f2937", outline="#6b7280", width=1,
+        )
+        cx = right - box_w // 2
+        self.canvas.create_text(
+            cx, top + _SCOREBOARD_LINE_HEIGHT * 0 + 8,
+            text=score_text, fill="#f9fafb",
+            font=("Helvetica", 11, "bold"), anchor="center",
+        )
+        self.canvas.create_text(
+            cx, top + _SCOREBOARD_LINE_HEIGHT * 1 + 8,
+            text=clock_text, fill="#9ca3af",
+            font=("Helvetica", 9), anchor="center",
+        )
+        if status_text:
+            self.canvas.create_text(
+                cx, top + _SCOREBOARD_LINE_HEIGHT * 2 + 8,
+                text=status_text, fill="#fbbf24",
+                font=("Helvetica", 10, "bold"), anchor="center",
+            )
 
     def _draw_squares(self) -> None:
         cx, cy = 430, 380
