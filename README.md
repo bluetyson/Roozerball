@@ -1,8 +1,8 @@
 # Roozerball
 
-A fully-implemented Python engine with **two desktop GUIs** for **Roozerball** — the over-the-top Australian full-contact roller-skating sport from J. P. Trostle's tabletop game (©2010). Teams of skaters, catchers, and motorcyclists battle on a circular inclined track to fire a steel ball through the opposing goal.
+A fully-implemented Python engine with **three desktop GUIs** for **Roozerball** — the over-the-top Australian full-contact roller-skating sport from J. P. Trostle's tabletop game (©2010). Teams of skaters, catchers, and motorcyclists battle on a circular inclined track to fire a steel ball through the opposing goal.
 
-The **Tier 2 Pygame GUI** (recommended) provides hardware-accelerated rendering, animated sprites, a camera system with smooth scrolling, incline lighting with shadows, and a spotlight on the ball carrier. The original **Tier 1 Tkinter GUI** remains available as a dependency-free fallback.
+The **Tier 3 Enhanced Pygame GUI** (recommended) builds on Tier 2 with a scene-graph node architecture, radial incline gradient overlays, ball heat-glow shimmer, speed lines on fast figures, goal-flash celebrations, advanced trail particles (motorcycle exhaust, dust clouds, confetti), and themed rounded UI panels with shadow dialogs. The **Tier 2 Pygame GUI** and the original **Tier 1 Tkinter GUI** remain available as fallbacks.
 
 ---
 
@@ -75,7 +75,27 @@ Then re-activate the venv and run normally.
 
 ## Running the GUI
 
-### Tier 2 — Pygame (recommended)
+### Tier 3 — Enhanced Pygame (recommended)
+
+```bash
+python -m roozerball.gui_tier3
+```
+
+The Pygame window opens at 1500 × 900 px with all Tier 2 features plus scene-graph rendering, radial incline gradients, ball heat shimmer, speed lines, goal-flash overlays, advanced trail particles, and themed rounded UI.
+
+**Keyboard shortcuts:**
+| Key | Action |
+|---|---|
+| `N` | Next Phase |
+| `P` | Play Turn |
+| `F` | Follow ball carrier (camera) |
+| `R` | Reset camera |
+| `I` | Toggle isometric perspective |
+| `Esc` | Cancel current interaction / skip movement |
+| Mouse wheel | Zoom in / out |
+| Right-click drag | Pan the board |
+
+### Tier 2 — Pygame (fallback)
 
 ```bash
 python -m roozerball.gui_pygame
@@ -362,7 +382,7 @@ The Computer vs Computer mode is fully playable and a good way to stress-test th
 
 ## Future Graphics Options
 
-The Tier 1 (Tkinter) and Tier 2 (Pygame) GUIs are both implemented. Below are the remaining upgrade paths:
+Tiers 1–3 are all implemented. Below is the status and remaining upgrade paths:
 
 ### Tier 1 — Stay in Python, enhance Tkinter ✅ Complete
 
@@ -380,22 +400,34 @@ Available via `python -m roozerball.gui_pygame`. All Tier 2 enhancements impleme
 | **Lighting / shadows** | ✅ Ring-brightness incline lighting, figure shadows proportional to ring height, additive spotlight on ball carrier |
 | **Particle system** | ✅ Pygame-native particles for cannon fire, crashes/knockdowns, and goal celebrations |
 
-### Tier 3 — Dedicated game engine (Godot)
+### Tier 3 — Enhanced Pygame with scene-graph architecture ✅ Complete
 
-The [`roozerball-rules-to-implement.md`](roozerball-rules-to-implement.md) already recommends **Godot Engine** as the long-term target. Key graphics gains:
+Available via `python -m roozerball.gui_tier3`. All Tier 3 enhancements implemented:
+
+| Enhancement | Status |
+|---|---|
+| **Scene-graph node system** | ✅ Figures, ball, markers, and UI as individual `SceneNode` objects with transforms and z-ordering |
+| **Radial incline gradients** | ✅ Per-ring gradient overlays simulating banked track incline lighting |
+| **Enhanced animations** | ✅ Smooth interpolation with 6-frame movement, 4-frame combat, stand-up, and fall sequences |
+| **Ball heat glow & shimmer** | ✅ Animated pulsing shimmer overlay keyed to ball temperature (very hot → cool) |
+| **Speed lines** | ✅ Directional speed trails on figures with SPD ≥ 5 during movement |
+| **Goal-flash celebration** | ✅ Full-board golden flash overlay fading over 1.5 seconds on every goal scored |
+| **Advanced particle system** | ✅ Trail-enabled particles for cannon sparks, motorcycle exhaust, dust clouds on falls, and confetti on goals |
+| **Themed UI** | ✅ Rounded-corner panels and dialogs with shadow effects, hover/pressed button states |
+| **Isometric toggle** | ✅ Press `I` to toggle isometric perspective (pseudo-3D banked track view) |
+
+### Tier 4 — Dedicated game engine (Godot)
+
+The [`roozerball-rules-to-implement.md`](roozerball-rules-to-implement.md) recommends **Godot Engine** as the long-term target. Key gains beyond Tier 3:
 
 | Enhancement | Description |
 |---|---|
-| **2D scene graph** | Each figure, the ball, markers, and UI panels become individual nodes with transforms, collision shapes, and animation players. |
-| **Tilemap / radial grid** | Custom radial tilemap shader for the 12-sector × 5-ring track with per-tile incline shading. |
-| **Skeletal animation** | 2D skeleton rigs for skater/biker figures — smooth run cycles, combat swings, falls, and stand-up sequences. |
-| **Shader effects** | GLSL shaders for ball heat glow, speed lines on fast-moving figures, goal-flash celebrations, and ring-incline gradients. |
-| **3D isometric view** | Optional 3D camera looking down at the banked track at an angle, showing the physical incline of the rings. |
-| **Particle systems** | GPU-accelerated particles for cannon sparks, motorcycle exhaust, dust clouds on falls, and crowd confetti on goals. |
-| **UI / HUD** | Godot's Control nodes for score overlays, stat panels, dice-roll popups, and replay timelines — fully themeable. |
-| **Web export** | One-click HTML5 build for browser play with no install required. |
+| **Native scene graph** | Godot's built-in node system with collision shapes, animation players, and physics integration |
+| **Skeletal animation** | 2D skeleton rigs for skater/biker figures — smooth run cycles, combat swings, falls |
+| **GLSL shaders** | GPU shaders for advanced glow, speed distortion, and atmospheric effects |
+| **Web export** | One-click HTML5 build for browser play with no install required |
 
-### Tier 4 — Full 3D (Godot 3D / Unreal / Unity)
+### Tier 5 — Full 3D (Godot 3D / Unreal / Unity)
 
 For a premium visual experience down the road:
 
