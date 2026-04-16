@@ -172,7 +172,7 @@ func _build_outer_wall() -> void:
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-		var base_y := RING_HEIGHTS["upper"]
+		var base_y: float = RING_HEIGHTS["upper"]
 		var p0 := Vector3(cos(a0) * WALL_RADIUS, base_y, sin(a0) * WALL_RADIUS)
 		var p1 := Vector3(cos(a1) * WALL_RADIUS, base_y, sin(a1) * WALL_RADIUS)
 		var p2 := Vector3(cos(a1) * WALL_RADIUS, base_y + WALL_HEIGHT, sin(a1) * WALL_RADIUS)
@@ -215,10 +215,10 @@ func _build_goals() -> void:
 		var post_height := 1.8
 		var post_radius := 0.08
 		var goal_width := 1.5  # Half-angle span at the wall.
-		var base_y := RING_HEIGHTS["upper"]
+		var base_y: float = RING_HEIGHTS["upper"]
 		var goal_color: Color = HOME_COLOR if goal_sector == 0 else VISITOR_COLOR
 
-		for offset in [-1.0, 1.0]:
+		for offset: float in [-1.0, 1.0]:
 			var post_angle := mid_a + offset * (goal_width / WALL_RADIUS)
 			var post := _create_cylinder(post_radius, post_height, goal_color)
 			post.position = Vector3(
