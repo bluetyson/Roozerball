@@ -141,7 +141,19 @@ func _poll_for_ready() -> void:
 		if content.length() > 0:
 			var json = JSON.new()
 			if json.parse(content) == OK:
-				state = json.data
+				var parsed: Dictionary = json.data
+				# Startup error written by godot_bridge.py before crashing.
+				if parsed.has("_startup_error"):
+					_poll_timer.stop()
+					_poll_timer.queue_free()
+					_poll_timer = null
+					var tb: String = parsed.get("_startup_traceback", "").strip_edges()
+					var full_msg := "Python engine startup error:\n" + parsed["_startup_error"]
+					if tb != "":
+						full_msg += "\n" + tb
+					bridge_error.emit(full_msg)
+					return
+				state = parsed
 				is_ready = true
 				_poll_timer.stop()
 				_poll_timer.queue_free()

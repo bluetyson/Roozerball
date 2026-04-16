@@ -182,10 +182,19 @@ class GodotBridge:
 
 def run_file_bridge(cmd_path: str, state_path: str) -> None:
     """Poll *cmd_path* for commands, write responses to *state_path*."""
-    bridge = GodotBridge()
+    import traceback as _traceback
 
-    # Write initial state so Godot knows the engine is ready.
-    _write_json(state_path, bridge._full_state())
+    try:
+        bridge = GodotBridge()
+        # Write initial state so Godot knows the engine is ready.
+        _write_json(state_path, bridge._full_state())
+    except Exception as exc:  # noqa: BLE001
+        # Write an error payload so Godot can display the real Python traceback.
+        _write_json(state_path, {
+            "_startup_error": str(exc),
+            "_startup_traceback": _traceback.format_exc(),
+        })
+        raise
 
     last_mtime: float = 0.0
     while True:
@@ -212,6 +221,10 @@ def run_file_bridge(cmd_path: str, state_path: str) -> None:
 
 
 def _write_json(path: str, data: Dict[str, Any]) -> None:
+    # Ensure the target directory exists (Godot user-data dir may not exist yet).
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
