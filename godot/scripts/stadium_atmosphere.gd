@@ -43,12 +43,13 @@ func _build_stands() -> void:
 			var p2 := Vector3(cos(a1) * r_out, y + 0.3, sin(a1) * r_out)
 			var p3 := Vector3(cos(a0) * r_out, y + 0.3, sin(a0) * r_out)
 
+			# Wound counter-clockwise when viewed from above (+Y).
 			st.add_vertex(p0)
+			st.add_vertex(p2)
 			st.add_vertex(p1)
-			st.add_vertex(p2)
 			st.add_vertex(p0)
-			st.add_vertex(p2)
 			st.add_vertex(p3)
+			st.add_vertex(p2)
 
 			var mesh := st.commit()
 			var inst := MeshInstance3D.new()

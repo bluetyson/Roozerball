@@ -61,10 +61,19 @@ func _start_bridge() -> void:
 		"--cmd-file", _pipe_path_in,
 		"--state-file", _pipe_path_out,
 	]
-	_pid = OS.create_process(python_path, args)
+
+	# Try python3 first (Linux/Mac), then python (Windows or aliased).
+	_pid = -1
+	for py in ["python3", "python"]:
+		_pid = OS.create_process(py, args)
+		if _pid > 0:
+			python_path = py
+			break
+
 	if _pid <= 0:
-		bridge_error.emit("Failed to start Python bridge process")
-		push_error("GameBridge: failed to launch python process")
+		var msg := "Cannot find Python 3 — install Python 3.11+ and ensure 'python3' or 'python' is on PATH."
+		bridge_error.emit(msg)
+		push_error("GameBridge: " + msg)
 		return
 
 	# Poll for the initial state file from the Python process.

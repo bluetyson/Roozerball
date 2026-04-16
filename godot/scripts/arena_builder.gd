@@ -141,14 +141,14 @@ func _create_track_quad(a0: float, a1: float, r_in: float, r_out: float,
 	st.set_color(color)
 	st.set_normal(Vector3.UP)
 
-	# Triangle 1.
+	# Triangle 1 — wound counter-clockwise when viewed from above (+Y).
 	st.add_vertex(p0)
-	st.add_vertex(p1)
 	st.add_vertex(p2)
+	st.add_vertex(p1)
 	# Triangle 2.
 	st.add_vertex(p0)
-	st.add_vertex(p2)
 	st.add_vertex(p3)
+	st.add_vertex(p2)
 
 	var mesh := st.commit()
 	var inst := MeshInstance3D.new()

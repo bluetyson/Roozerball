@@ -9,6 +9,7 @@ var _log_box: RichTextLabel = null
 var _controls_label: Label = null
 var _penalty_panel: VBoxContainer = null
 var _auto_indicator: Label = null
+var _bridge_status_label: Label = null
 
 # Style constants.
 const PANEL_BG := Color(0.05, 0.05, 0.12, 0.85)
@@ -25,6 +26,8 @@ func _ready() -> void:
 	# Connect to GameBridge signals.
 	if GameBridge:
 		GameBridge.state_updated.connect(_on_state_updated)
+		GameBridge.bridge_error.connect(_on_bridge_error)
+		GameBridge.engine_ready.connect(_on_engine_ready)
 
 
 func _build_ui() -> void:
@@ -95,6 +98,14 @@ func _build_ui() -> void:
 	_auto_indicator.add_theme_color_override("font_color", Color(0.2, 1.0, 0.3))
 	_auto_indicator.position = Vector2(380, 20)
 	add_child(_auto_indicator)
+
+	# ── Bridge status indicator ──────────────────────────────────────
+	_bridge_status_label = Label.new()
+	_bridge_status_label.text = "⏳ Connecting to Python engine..."
+	_bridge_status_label.add_theme_font_size_override("font_size", 16)
+	_bridge_status_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
+	_bridge_status_label.position = Vector2(660, 110)
+	add_child(_bridge_status_label)
 
 
 # ── state update ─────────────────────────────────────────────────────
@@ -197,6 +208,27 @@ func _update_penalty_box(state: Dictionary) -> void:
 func set_auto_play(enabled: bool) -> void:
 	if _auto_indicator:
 		_auto_indicator.text = "▶ AUTO" if enabled else ""
+
+
+func set_bridge_status(connected: bool, error_msg: String = "") -> void:
+	if _bridge_status_label == null:
+		return
+	if connected:
+		_bridge_status_label.text = ""
+	elif error_msg != "":
+		_bridge_status_label.text = "⚠ " + error_msg
+		_bridge_status_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	else:
+		_bridge_status_label.text = "⏳ Connecting to Python engine..."
+		_bridge_status_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
+
+
+func _on_bridge_error(message: String) -> void:
+	set_bridge_status(false, message)
+
+
+func _on_engine_ready() -> void:
+	set_bridge_status(true)
 
 
 # ── helpers ──────────────────────────────────────────────────────────

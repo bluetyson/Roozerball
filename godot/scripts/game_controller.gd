@@ -135,6 +135,8 @@ func _on_game_over(winner: String) -> void:
 
 func _on_bridge_error(message: String) -> void:
 	push_warning("Bridge error: " + message)
+	if hud and hud.has_method("set_bridge_status"):
+		hud.set_bridge_status(false, message)
 
 
 # ── lighting ─────────────────────────────────────────────────────────
