@@ -103,7 +103,41 @@ func _poll_for_ready() -> void:
 	var elapsed_ms := Time.get_ticks_msec() - _connect_start_msec
 	var elapsed_s := elapsed_ms / 1000.0
 
-	# Detect if the Python process has already exited unexpectedly.
+	# Check the state file FIRST — Python may have written a startup-error payload
+	# and then exited.  Reading the file here lets us show the real Python traceback
+	# instead of the generic "process exited unexpectedly" message below.
+	if FileAccess.file_exists(_pipe_path_out):
+		var content = FileAccess.get_file_as_string(_pipe_path_out)
+		if content.length() > 0:
+			var json = JSON.new()
+			if json.parse(content) == OK:
+				var parsed: Dictionary = json.data
+				# Startup error written by godot_bridge.py before crashing.
+				if parsed.has("_startup_error"):
+					_poll_timer.stop()
+					_poll_timer.queue_free()
+					_poll_timer = null
+					var tb: String = parsed.get("_startup_traceback", "").strip_edges()
+					var full_msg := "Python engine startup error:\n" + str(parsed["_startup_error"])
+					if tb != "":
+						full_msg += "\n" + tb
+					bridge_error.emit(full_msg)
+					return
+				state = parsed
+				is_ready = true
+				_poll_timer.stop()
+				_poll_timer.queue_free()
+				_poll_timer = null
+				engine_ready.emit()
+				state_updated.emit(state)
+				# Flush queued commands.
+				for cmd in _command_queue:
+					_send_command(cmd)
+				_command_queue.clear()
+				return
+
+	# Detect if the Python process has already exited unexpectedly (checked after
+	# the state-file read above so a Python-written error payload takes priority).
 	if _pid > 0 and not OS.is_process_running(_pid):
 		_poll_timer.stop()
 		_poll_timer.queue_free()
@@ -134,36 +168,6 @@ func _poll_for_ready() -> void:
 	var cur_s := int(elapsed_ms / 1000)
 	if cur_s != last_s and elapsed_ms > 200:
 		engine_status.emit("Waiting for Python engine... %.0f s" % elapsed_s)
-
-	# Check whether the Python bridge has written its initial state file.
-	if FileAccess.file_exists(_pipe_path_out):
-		var content = FileAccess.get_file_as_string(_pipe_path_out)
-		if content.length() > 0:
-			var json = JSON.new()
-			if json.parse(content) == OK:
-				var parsed: Dictionary = json.data
-				# Startup error written by godot_bridge.py before crashing.
-				if parsed.has("_startup_error"):
-					_poll_timer.stop()
-					_poll_timer.queue_free()
-					_poll_timer = null
-					var tb: String = parsed.get("_startup_traceback", "").strip_edges()
-					var full_msg := "Python engine startup error:\n" + str(parsed["_startup_error"])
-					if tb != "":
-						full_msg += "\n" + tb
-					bridge_error.emit(full_msg)
-					return
-				state = parsed
-				is_ready = true
-				_poll_timer.stop()
-				_poll_timer.queue_free()
-				_poll_timer = null
-				engine_ready.emit()
-				state_updated.emit(state)
-				# Flush queued commands.
-				for cmd in _command_queue:
-					_send_command(cmd)
-				_command_queue.clear()
 
 
 # ── public API ───────────────────────────────────────────────────────

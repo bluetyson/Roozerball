@@ -12,7 +12,7 @@ extends Node3D
 enum Mode { OVERHEAD, TRACKSIDE, GOALCAM }
 
 # ── configuration ────────────────────────────────────────────────────
-@export var overhead_height := 38.0
+@export var overhead_height := 55.0
 @export var trackside_height := 4.0
 @export var trackside_distance := 20.0
 @export var goalcam_distance := 5.0
@@ -35,7 +35,7 @@ var focus_sector: int = -1
 func _ready() -> void:
 	_camera = Camera3D.new()
 	_camera.name = "Camera"
-	_camera.fov = 55.0
+	_camera.fov = 65.0
 	_camera.near = 0.1
 	_camera.far = 200.0
 	add_child(_camera)
