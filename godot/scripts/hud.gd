@@ -28,6 +28,7 @@ func _ready() -> void:
 		GameBridge.state_updated.connect(_on_state_updated)
 		GameBridge.bridge_error.connect(_on_bridge_error)
 		GameBridge.engine_ready.connect(_on_engine_ready)
+		GameBridge.engine_status.connect(_on_engine_status)
 
 
 func _build_ui() -> void:
@@ -105,6 +106,8 @@ func _build_ui() -> void:
 	_bridge_status_label.add_theme_font_size_override("font_size", 16)
 	_bridge_status_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
 	_bridge_status_label.position = Vector2(660, 110)
+	_bridge_status_label.size = Vector2(600, 120)
+	_bridge_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_bridge_status_label)
 
 
@@ -229,6 +232,13 @@ func _on_bridge_error(message: String) -> void:
 
 func _on_engine_ready() -> void:
 	set_bridge_status(true)
+
+
+func _on_engine_status(message: String) -> void:
+	if _bridge_status_label == null:
+		return
+	_bridge_status_label.text = "⏳ " + message
+	_bridge_status_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
 
 
 # ── helpers ──────────────────────────────────────────────────────────

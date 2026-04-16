@@ -11,6 +11,8 @@ signal phase_result_received(result: Dictionary)
 signal game_over(winner: String)
 signal bridge_error(message: String)
 signal engine_ready
+## Fired during connection to report progress / diagnostic messages.
+signal engine_status(message: String)
 
 # ── configuration ────────────────────────────────────────────────────
 ## Path to Python executable; override with --python=<path> on cmdline.
@@ -28,6 +30,9 @@ var _bridge_thread: Thread = null
 var _pipe_path_in: String = ""
 var _pipe_path_out: String = ""
 var _poll_timer: Timer = null
+var _script_path: String = ""
+var _connect_start_msec: int = 0
+const CONNECT_TIMEOUT_MS: int = 15_000  # 15 seconds before giving up
 
 # Queued commands waiting for engine readiness.
 var _command_queue: Array[Dictionary] = []
@@ -55,28 +60,37 @@ func _start_bridge() -> void:
 		DirAccess.remove_absolute(_pipe_path_out)
 
 	# Launch the Python bridge process.
-	var script_path = repo_root.path_join("roozerball").path_join("godot_bridge.py")
+	_script_path = repo_root.path_join("roozerball").path_join("godot_bridge.py")
 	var args: PackedStringArray = [
-		script_path,
+		_script_path,
 		"--cmd-file", _pipe_path_in,
 		"--state-file", _pipe_path_out,
 	]
 
+	engine_status.emit("Script: %s\nCmd file: %s\nState file: %s" % [_script_path, _pipe_path_in, _pipe_path_out])
+
 	# Try python3 first (Linux/Mac), then python (Windows or aliased).
 	_pid = -1
 	for py in ["python3", "python"]:
+		engine_status.emit("Trying '%s'..." % py)
 		_pid = OS.create_process(py, args)
 		if _pid > 0:
 			python_path = py
 			break
 
 	if _pid <= 0:
-		var msg := "Cannot find Python 3 — install Python 3.11+ and ensure 'python3' or 'python' is on PATH."
+		var msg := (
+			"Cannot find Python 3 — install Python 3.11+ and ensure 'python3' or 'python' is on PATH.\n"
+			+ "Tried: python3, python\nScript path: %s" % _script_path
+		)
 		bridge_error.emit(msg)
 		push_error("GameBridge: " + msg)
 		return
 
+	engine_status.emit("Launched '%s' (PID %d)\nWaiting for engine to start..." % [python_path, _pid])
+
 	# Poll for the initial state file from the Python process.
+	_connect_start_msec = Time.get_ticks_msec()
 	_poll_timer = Timer.new()
 	_poll_timer.wait_time = 0.1
 	_poll_timer.one_shot = false
@@ -86,6 +100,42 @@ func _start_bridge() -> void:
 
 
 func _poll_for_ready() -> void:
+	var elapsed_ms := Time.get_ticks_msec() - _connect_start_msec
+	var elapsed_s := elapsed_ms / 1000.0
+
+	# Detect if the Python process has already exited unexpectedly.
+	if _pid > 0 and not OS.is_process_running(_pid):
+		_poll_timer.stop()
+		_poll_timer.queue_free()
+		_poll_timer = null
+		bridge_error.emit(
+			"Python process exited unexpectedly (PID %d) after %.1f s.\n"
+			% [_pid, elapsed_s]
+			+ "Check that the roozerball package is importable.\n"
+			+ "Script: %s" % _script_path
+		)
+		return
+
+	# Enforce a connection timeout.
+	if elapsed_ms >= CONNECT_TIMEOUT_MS:
+		_poll_timer.stop()
+		_poll_timer.queue_free()
+		_poll_timer = null
+		bridge_error.emit(
+			"Timed out after %.0f s waiting for Python engine.\n" % elapsed_s
+			+ "Script: %s\n" % _script_path
+			+ "Expected state file: %s" % _pipe_path_out
+		)
+		return
+
+	# Emit a progress update once per second.
+	# (Skip the first 200 ms to avoid a flash before the PID message is shown.)
+	var last_s := int((elapsed_ms - 100) / 1000)  # 100 ms = half the poll interval
+	var cur_s := int(elapsed_ms / 1000)
+	if cur_s != last_s and elapsed_ms > 200:
+		engine_status.emit("Waiting for Python engine... %.0f s" % elapsed_s)
+
+	# Check whether the Python bridge has written its initial state file.
 	if FileAccess.file_exists(_pipe_path_out):
 		var content = FileAccess.get_file_as_string(_pipe_path_out)
 		if content.length() > 0:
