@@ -148,7 +148,7 @@ func _poll_for_ready() -> void:
 					_poll_timer.queue_free()
 					_poll_timer = null
 					var tb: String = parsed.get("_startup_traceback", "").strip_edges()
-					var full_msg := "Python engine startup error:\n" + parsed["_startup_error"]
+					var full_msg := "Python engine startup error:\n" + str(parsed["_startup_error"])
 					if tb != "":
 						full_msg += "\n" + tb
 					bridge_error.emit(full_msg)
