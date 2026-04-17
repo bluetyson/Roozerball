@@ -47,6 +47,12 @@ func _ready() -> void:
 	if repo_root.ends_with("/godot") or repo_root.ends_with("\\godot"):
 		repo_root = repo_root.get_base_dir()
 
+	# Allow --python=<path> on the command line to override the interpreter.
+	for arg in OS.get_cmdline_args():
+		if arg.begins_with("--python="):
+			python_path = arg.substr(9)  # skip "--python="
+			break
+
 	_start_bridge()
 
 
@@ -92,15 +98,76 @@ func _start_bridge() -> void:
 # the engine is importable.  Uses call_deferred() for all UI updates so
 # that no Godot node is touched from outside the main thread.
 func _run_preflight() -> void:
+	var is_windows: bool = OS.get_name() == "Windows"
+
+	# ── Build ordered list of Python executables to try ───────────────
+	var candidates: PackedStringArray = PackedStringArray()
+
+	# 1. Explicit --python= override (set in _ready from CLI) takes priority.
+	if python_path != "python":
+		candidates.append(python_path)
+
+	# 2. Standard names that should be on PATH in most environments.
+	candidates.append("python3")
+	candidates.append("python")
+	if is_windows:
+		candidates.append("py")  # Windows Python Launcher.
+
+	# 3. Python from an active virtual-environment (VIRTUAL_ENV).
+	var venv := OS.get_environment("VIRTUAL_ENV")
+	if venv != "":
+		if is_windows:
+			candidates.append(venv.path_join("Scripts/python.exe"))
+		else:
+			candidates.append(venv.path_join("bin/python3"))
+
+	# 4. Python from an active conda environment (CONDA_PREFIX).
+	var conda_prefix := OS.get_environment("CONDA_PREFIX")
+	if conda_prefix != "":
+		if is_windows:
+			candidates.append(conda_prefix.path_join("python.exe"))
+		else:
+			candidates.append(conda_prefix.path_join("bin/python3"))
+
+	# 5. Conda 'roozerball' environment at common installation prefixes.
+	var home: String
+	if is_windows:
+		home = OS.get_environment("USERPROFILE")
+	else:
+		home = OS.get_environment("HOME")
+	if home != "":
+		var bases := PackedStringArray([
+			"miniconda3", "miniconda", "anaconda3", "anaconda",
+			"mambaforge", "miniforge3",
+		])
+		for base in bases:
+			var env_py: String
+			if is_windows:
+				env_py = home.path_join(base + "/envs/roozerball/python.exe")
+			else:
+				env_py = home.path_join(base + "/envs/roozerball/bin/python3")
+			if not candidates.has(env_py):
+				candidates.append(env_py)
+
+	# ── Try each candidate in order ────────────────────────────────────
 	var preflight_py := ""
-	for py in ["python3", "python"]:
+	for py in candidates:
+		# For absolute paths skip the OS.execute() call if the file is
+		# missing — avoids spurious NUL-byte output Godot warns about
+		# when the OS tries to execute a non-existent binary.
+		if py.is_absolute_path() and not FileAccess.file_exists(py):
+			continue
 		var check_output: Array = []
 		var check_code := OS.execute(py, ["--version"], check_output, true)
-		if check_code == 0 and check_output.size() > 0:
+		if check_code == 0:
+			var version_str := ""
+			if check_output.size() > 0:
+				# Strip NUL bytes that can cause Godot Unicode parse warnings.
+				version_str = _strip_output(str(check_output[0]))
 			preflight_py = py
 			call_deferred(
 				"_emit_engine_status",
-				"Found: %s → %s" % [py, str(check_output[0]).strip_edges()]
+				"Found: %s%s" % [py, (" → " + version_str) if version_str != "" else ""]
 			)
 			break
 
@@ -111,7 +178,12 @@ func _run_preflight() -> void:
 				"success": false,
 				"error": (
 					"Cannot find Python 3 — install Python 3.11+ and ensure "
-					+ "'python3' or 'python' is on PATH.\nTried: python3, python"
+					+ "the interpreter is on PATH.\n\n"
+					+ "Tried:\n  • " + "\n  • ".join(candidates) + "\n\n"
+					+ "Tips:\n"
+					+ "  • Activate your conda environment before launching Godot:\n"
+					+ "        conda activate roozerball\n"
+					+ "  • Or pass --python=<path> as a command-line argument."
 				),
 			}
 		)
@@ -417,6 +489,13 @@ func _cleanup() -> void:
 			DirAccess.remove_absolute(path)
 
 
+## Strip NUL bytes from *s* and trim surrounding whitespace.
+## OS.execute() can capture NUL-padded output on some platforms; passing
+## those strings through Godot's text system triggers Unicode parse warnings.
+static func _strip_output(s: String) -> String:
+	return s.replace(char(0), "").strip_edges()
+
+
 ## Return a Python repr()-style string literal for embedding in -c snippets.
 ## Escapes backslashes, quotes, and control characters that could break the
 ## string context.
@@ -427,5 +506,5 @@ static func _python_repr(s: String) -> String:
 	out = out.replace("\n", "\\n")
 	out = out.replace("\r", "\\r")
 	out = out.replace("\t", "\\t")
-	out = out.replace("\u0000", "\\0")
+	out = out.replace(char(0), "\\0")
 	return "'" + out + "'"
