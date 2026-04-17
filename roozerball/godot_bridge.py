@@ -24,18 +24,6 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from roozerball.engine.constants import (
-    BallState,
-    FigureStatus,
-    FigureType,
-    Phase,
-    Ring,
-    TeamSide,
-    SECTORS,
-    SQUARES_PER_RING,
-)
-from roozerball.engine.game import Game
-
 
 class GodotBridge:
     """Wraps a :class:`Game` and serialises its state as JSON."""
@@ -185,6 +173,25 @@ def run_file_bridge(cmd_path: str, state_path: str) -> None:
     import traceback as _traceback
 
     try:
+        # Import engine modules here (inside try/except) so that any
+        # ImportError or other startup failure is caught and written to the
+        # state file.  Godot reads that file before checking the process exit
+        # code, so this ensures a human-readable error is always displayed
+        # instead of the generic "process exited unexpectedly" message.
+        global BallState, FigureStatus, FigureType, Phase, Ring, TeamSide
+        global SECTORS, SQUARES_PER_RING, Game
+        from roozerball.engine.constants import (
+            BallState,
+            FigureStatus,
+            FigureType,
+            Phase,
+            Ring,
+            TeamSide,
+            SECTORS,
+            SQUARES_PER_RING,
+        )
+        from roozerball.engine.game import Game
+
         bridge = GodotBridge()
         # Write initial state so Godot knows the engine is ready.
         _write_json(state_path, bridge._full_state())

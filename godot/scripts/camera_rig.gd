@@ -49,7 +49,14 @@ func _process(delta: float) -> void:
 
 	# Smooth interpolation.
 	_camera.global_position = _camera.global_position.lerp(_target_pos, delta * lerp_speed)
-	_camera.look_at(_target_look, Vector3.UP)
+	_camera.look_at(_target_look, _look_up_vec())
+
+
+func _look_up_vec() -> Vector3:
+	# Overhead mode looks nearly straight down, so Vector3.UP is almost
+	# parallel to the view direction and causes a degenerate look_at.
+	# Use -Z as the up reference instead, which is always stable.
+	return Vector3(0.0, 0.0, -1.0) if current_mode == Mode.OVERHEAD else Vector3.UP
 
 
 func _handle_input() -> void:
@@ -95,4 +102,4 @@ func _apply_overhead_instantly() -> void:
 	_target_look = Vector3.ZERO
 	if _camera:
 		_camera.global_position = _target_pos
-		_camera.look_at(_target_look, Vector3.UP)
+		_camera.look_at(_target_look, _look_up_vec())

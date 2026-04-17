@@ -38,7 +38,11 @@ const SQUARES_PER_RING := {
 	"upper":  4,
 }
 
-## Height offsets per ring so the track visually rises.
+## Number of angular sub-steps used when building each sector arc quad.
+## Higher values produce rounder-looking rings (48 steps total for a full
+## circle when NUM_SECTORS == 12 and ARC_SUBDIVISIONS == 4).
+const ARC_SUBDIVISIONS := 4
+
 const RING_HEIGHTS := {
 	"floor":  0.0,
 	"lower":  0.3,
@@ -132,23 +136,32 @@ func _create_track_quad(a0: float, a1: float, r_in: float, r_out: float,
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	# Four corners of the quad (on the XZ plane at Y = height).
-	var p0 := Vector3(cos(a0) * r_in,  height, sin(a0) * r_in)
-	var p1 := Vector3(cos(a1) * r_in,  height, sin(a1) * r_in)
-	var p2 := Vector3(cos(a1) * r_out, height, sin(a1) * r_out)
-	var p3 := Vector3(cos(a0) * r_out, height, sin(a0) * r_out)
-
 	st.set_color(color)
 	st.set_normal(Vector3.UP)
 
-	# Triangle 1 — wound counter-clockwise when viewed from above (+Y).
-	st.add_vertex(p0)
-	st.add_vertex(p2)
-	st.add_vertex(p1)
-	# Triangle 2.
-	st.add_vertex(p0)
-	st.add_vertex(p3)
-	st.add_vertex(p2)
+	# Subdivide the arc into ARC_SUBDIVISIONS steps so the ring edges follow
+	# the actual curve instead of a single straight chord.  This prevents the
+	# rings from looking like flat-edged polygons ("cut-off circles") in the
+	# overhead view.
+	for step in range(ARC_SUBDIVISIONS):
+		var t0 := float(step)       / float(ARC_SUBDIVISIONS)
+		var t1 := float(step + 1)   / float(ARC_SUBDIVISIONS)
+		var sa := a0 + t0 * (a1 - a0)
+		var ea := a0 + t1 * (a1 - a0)
+
+		var p0 := Vector3(cos(sa) * r_in,  height, sin(sa) * r_in)
+		var p1 := Vector3(cos(ea) * r_in,  height, sin(ea) * r_in)
+		var p2 := Vector3(cos(ea) * r_out, height, sin(ea) * r_out)
+		var p3 := Vector3(cos(sa) * r_out, height, sin(sa) * r_out)
+
+		# Triangle 1 — wound counter-clockwise when viewed from above (+Y).
+		st.add_vertex(p0)
+		st.add_vertex(p2)
+		st.add_vertex(p1)
+		# Triangle 2.
+		st.add_vertex(p0)
+		st.add_vertex(p3)
+		st.add_vertex(p2)
 
 	var mesh := st.commit()
 	var inst := MeshInstance3D.new()
