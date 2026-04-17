@@ -4,6 +4,7 @@
 Communicates with the Godot front-end via JSON files:
   --cmd-file   : Godot writes commands here (the bridge polls it)
   --state-file : Bridge writes game state here after each command
+  --error-file : Bridge writes crash details here on startup failure
 
 Run by the Godot ``GameBridge`` autoload, or manually for testing::
 
@@ -168,7 +169,7 @@ class GodotBridge:
 
 # ── file-based event loop ────────────────────────────────────────────
 
-def run_file_bridge(cmd_path: str, state_path: str) -> None:
+def run_file_bridge(cmd_path: str, state_path: str, *, error_path: str = "") -> None:
     """Poll *cmd_path* for commands, write responses to *state_path*."""
     import traceback as _traceback
 
@@ -196,11 +197,15 @@ def run_file_bridge(cmd_path: str, state_path: str) -> None:
         # Write initial state so Godot knows the engine is ready.
         _write_json(state_path, bridge._full_state())
     except Exception as exc:  # noqa: BLE001
+        tb_text = _traceback.format_exc()
         # Write an error payload so Godot can display the real Python traceback.
         _write_json(state_path, {
             "_startup_error": str(exc),
-            "_startup_traceback": _traceback.format_exc(),
+            "_startup_traceback": tb_text,
         })
+        # Also write to the dedicated error file for belt-and-suspenders.
+        if error_path:
+            _write_error_log(error_path, tb_text)
         raise
 
     last_mtime: float = 0.0
@@ -244,9 +249,93 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Roozerball Godot ↔ Python bridge")
     parser.add_argument("--cmd-file", required=True, help="Path Godot writes commands to")
     parser.add_argument("--state-file", required=True, help="Path bridge writes state to")
+    parser.add_argument(
+        "--error-file",
+        default="",
+        help="Path for crash/error details (Godot reads this on failure)",
+    )
     args = parser.parse_args()
-    run_file_bridge(args.cmd_file, args.state_file)
+    run_file_bridge(args.cmd_file, args.state_file, error_path=args.error_file)
+
+
+def _write_error_log(error_path: str, text: str) -> None:
+    """Best-effort write of *text* to *error_path*."""
+    try:
+        parent = os.path.dirname(error_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(error_path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    except Exception:  # noqa: BLE001 – last-resort handler; must not raise
+        pass
 
 
 if __name__ == "__main__":
-    main()
+    # ------------------------------------------------------------------
+    # Top-level error wrapper.
+    #
+    # OS.create_process() in Godot gives us no access to Python's stderr,
+    # so if the process crashes before run_file_bridge() writes its error
+    # payload (e.g. bad CLI args, script-level SyntaxError, or a failure
+    # inside _write_json itself) the error is completely invisible.
+    #
+    # This block catches *everything* and writes the traceback to both
+    # the --error-file (always) and the --state-file (best-effort) so
+    # Godot can display the real cause instead of "process exited
+    # unexpectedly".
+    # ------------------------------------------------------------------
+
+    # Peek at argv to find file paths before argparse runs (argparse
+    # itself might fail, so we can't rely on it).
+    _state_path: Optional[str] = None
+    _error_path: Optional[str] = None
+    for _i, _arg in enumerate(sys.argv):
+        if _arg == "--state-file" and _i + 1 < len(sys.argv):
+            _state_path = sys.argv[_i + 1]
+        elif _arg == "--error-file" and _i + 1 < len(sys.argv):
+            _error_path = sys.argv[_i + 1]
+
+    # If no explicit --error-file, derive one from --state-file.
+    if not _error_path and _state_path:
+        _error_path = _state_path + ".error"
+
+    # Redirect stderr to the error file so that even Python's own
+    # unhandled-exception output (which normally goes to stderr) is
+    # captured for Godot to read.
+    # The file handle is intentionally never closed — it replaces stderr
+    # for the remaining lifetime of the process.
+    if _error_path:
+        try:
+            _err_dir = os.path.dirname(_error_path)
+            if _err_dir:
+                os.makedirs(_err_dir, exist_ok=True)
+            sys.stderr = open(_error_path, "w", encoding="utf-8")  # noqa: SIM115
+        except Exception:  # noqa: BLE001
+            pass  # Fall back to normal stderr.
+
+    try:
+        main()
+    except SystemExit:
+        raise  # Let argparse --help / error exits propagate normally.
+    except Exception:
+        import traceback as _tb
+        _full_tb = _tb.format_exc()
+
+        # 1. Write to the dedicated error file.
+        if _error_path:
+            _write_error_log(_error_path, _full_tb)
+
+        # 2. Also try to write an error payload to the state file so the
+        #    existing _poll_for_ready() logic in game_bridge.gd picks it up.
+        if _state_path:
+            try:
+                _lines = _full_tb.splitlines() if _full_tb else []
+                _write_json(_state_path, {
+                    "_startup_error": _lines[-1] if _lines else "unknown",
+                    "_startup_traceback": _full_tb,
+                })
+            except Exception:  # noqa: BLE001
+                pass
+
+        # Re-raise so the process exits with a non-zero code.
+        raise

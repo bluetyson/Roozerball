@@ -29,6 +29,7 @@ var _stdout: FileAccess = null
 var _bridge_thread: Thread = null
 var _pipe_path_in: String = ""
 var _pipe_path_out: String = ""
+var _error_log_path: String = ""
 var _poll_timer: Timer = null
 var _script_path: String = ""
 var _connect_start_msec: int = 0
@@ -52,40 +53,91 @@ func _start_bridge() -> void:
 	var tmp = OS.get_user_data_dir()
 	_pipe_path_in = tmp.path_join("roozerball_cmd.json")
 	_pipe_path_out = tmp.path_join("roozerball_state.json")
+	_error_log_path = tmp.path_join("roozerball_error.log")
 
 	# Clear old files.
-	if FileAccess.file_exists(_pipe_path_in):
-		DirAccess.remove_absolute(_pipe_path_in)
-	if FileAccess.file_exists(_pipe_path_out):
-		DirAccess.remove_absolute(_pipe_path_out)
+	for old_path in [_pipe_path_in, _pipe_path_out, _error_log_path]:
+		if FileAccess.file_exists(old_path):
+			DirAccess.remove_absolute(old_path)
 
-	# Launch the Python bridge process.
+	# Validate the bridge script exists before trying to launch it.
 	_script_path = repo_root.path_join("roozerball").path_join("godot_bridge.py")
-	var args: PackedStringArray = [
-		_script_path,
-		"--cmd-file", _pipe_path_in,
-		"--state-file", _pipe_path_out,
-	]
-
-	engine_status.emit("Script: %s\nCmd file: %s\nState file: %s" % [_script_path, _pipe_path_in, _pipe_path_out])
-
-	# Try python3 first (Linux/Mac), then python (Windows or aliased).
-	_pid = -1
-	for py in ["python3", "python"]:
-		engine_status.emit("Trying '%s'..." % py)
-		_pid = OS.create_process(py, args)
-		if _pid > 0:
-			python_path = py
-			break
-
-	if _pid <= 0:
+	if not FileAccess.file_exists(_script_path):
 		var msg := (
-			"Cannot find Python 3 — install Python 3.11+ and ensure 'python3' or 'python' is on PATH.\n"
-			+ "Tried: python3, python\nScript path: %s" % _script_path
+			"Python bridge script not found:\n  %s\n\n" % _script_path
+			+ "Resolved repo root: %s\n" % repo_root
+			+ "Ensure the Godot project is inside the repository's 'godot/' folder."
 		)
 		bridge_error.emit(msg)
 		push_error("GameBridge: " + msg)
 		return
+
+	var args: PackedStringArray = [
+		_script_path,
+		"--cmd-file", _pipe_path_in,
+		"--state-file", _pipe_path_out,
+		"--error-file", _error_log_path,
+	]
+
+	engine_status.emit("Script: %s\nCmd file: %s\nState file: %s" % [_script_path, _pipe_path_in, _pipe_path_out])
+
+	# ── Pre-flight check ─────────────────────────────────────────────
+	# Run a quick blocking OS.execute() to verify that Python exists, is
+	# the right version, and can import the engine.  Any failure here
+	# gives us immediate, readable output (stdout captured by Godot)
+	# instead of the opaque "process exited unexpectedly" later.
+	_pid = -1
+	var preflight_py := ""
+	for py in ["python3", "python"]:
+		var check_output: Array = []
+		var check_code := OS.execute(py, ["--version"], check_output, true)
+		if check_code == 0 and check_output.size() > 0:
+			preflight_py = py
+			engine_status.emit("Found: %s → %s" % [py, str(check_output[0]).strip_edges()])
+			break
+
+	if preflight_py == "":
+		var msg := (
+			"Cannot find Python 3 — install Python 3.11+ and ensure 'python3' or 'python' is on PATH.\n"
+			+ "Tried: python3, python"
+		)
+		bridge_error.emit(msg)
+		push_error("GameBridge: " + msg)
+		return
+
+	# Verify the engine is importable (catches missing deps / syntax errors
+	# immediately with full output instead of the background-process black hole).
+	var import_output: Array = []
+	var import_snippet := (
+		"import sys; sys.path.insert(0, %s); "
+		% _python_repr(repo_root)
+		+ "from roozerball.engine.game import Game; print('engine OK')"
+	)
+	var import_code := OS.execute(preflight_py, ["-c", import_snippet], import_output, true)
+	if import_code != 0:
+		var detail := "\n".join(import_output).strip_edges() if import_output.size() > 0 else "(no output)"
+		var msg := (
+			"Python can start but cannot import the game engine.\n\n"
+			+ "Command: %s -c \"%s\"\n" % [preflight_py, import_snippet]
+			+ "Exit code: %d\n\nOutput:\n%s\n\n" % [import_code, detail]
+			+ "Repo root: %s\nScript: %s" % [repo_root, _script_path]
+		)
+		bridge_error.emit(msg)
+		push_error("GameBridge: " + msg)
+		return
+	engine_status.emit("Pre-flight OK — engine is importable")
+
+	# ── Launch the bridge process ────────────────────────────────────
+	engine_status.emit("Trying '%s'..." % preflight_py)
+	_pid = OS.create_process(preflight_py, args)
+	if _pid <= 0:
+		var msg := (
+			"OS.create_process() failed for '%s'.\nArgs: %s" % [preflight_py, str(args)]
+		)
+		bridge_error.emit(msg)
+		push_error("GameBridge: " + msg)
+		return
+	python_path = preflight_py
 
 	engine_status.emit("Launched '%s' (PID %d)\nWaiting for engine to start..." % [python_path, _pid])
 
@@ -142,12 +194,20 @@ func _poll_for_ready() -> void:
 		_poll_timer.stop()
 		_poll_timer.queue_free()
 		_poll_timer = null
-		bridge_error.emit(
-			"Python process exited unexpectedly (PID %d) after %.1f s.\n"
-			% [_pid, elapsed_s]
-			+ "Check that the roozerball package is importable.\n"
-			+ "Script: %s" % _script_path
-		)
+
+		# Try to read the dedicated error log (Python redirects stderr there
+		# and also writes full tracebacks on unhandled exceptions).
+		var error_detail := ""
+		if _error_log_path != "" and FileAccess.file_exists(_error_log_path):
+			error_detail = FileAccess.get_file_as_string(_error_log_path).strip_edges()
+
+		var msg := "Python process exited unexpectedly (PID %d) after %.1f s.\n" % [_pid, elapsed_s]
+		if error_detail != "":
+			msg += "\nPython error output:\n" + error_detail + "\n"
+		else:
+			msg += "No error log was written — the process may have been killed externally.\n"
+		msg += "\nScript: %s" % _script_path
+		bridge_error.emit(msg)
 		return
 
 	# Enforce a connection timeout.
@@ -259,6 +319,20 @@ func _cleanup() -> void:
 		OS.kill(_pid)
 		_pid = -1
 	# Clean up temp files.
-	for path in [_pipe_path_in, _pipe_path_out]:
+	for path in [_pipe_path_in, _pipe_path_out, _error_log_path]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(path)
+
+
+## Return a Python repr()-style string literal for embedding in -c snippets.
+## Escapes backslashes, quotes, and control characters that could break the
+## string context.
+static func _python_repr(s: String) -> String:
+	var out := s
+	out = out.replace("\\", "\\\\")
+	out = out.replace("'", "\\'")
+	out = out.replace("\n", "\\n")
+	out = out.replace("\r", "\\r")
+	out = out.replace("\t", "\\t")
+	out = out.replace("\0", "\\0")
+	return "'" + out + "'"
