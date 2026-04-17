@@ -329,8 +329,9 @@ if __name__ == "__main__":
         #    existing _poll_for_ready() logic in game_bridge.gd picks it up.
         if _state_path:
             try:
+                _lines = _full_tb.splitlines() if _full_tb else []
                 _write_json(_state_path, {
-                    "_startup_error": _full_tb.splitlines()[-1] if _full_tb else "unknown",
+                    "_startup_error": _lines[-1] if _lines else "unknown",
                     "_startup_traceback": _full_tb,
                 })
             except Exception:  # noqa: BLE001
