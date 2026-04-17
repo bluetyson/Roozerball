@@ -55,12 +55,13 @@ const HOME_COLOR := Color(0.12, 0.47, 0.71)   # blue
 const VISITOR_COLOR := Color(0.84, 0.15, 0.16) # red
 const GOAL_COLOR := Color(1.0, 0.85, 0.0, 0.8) # gold
 
-## Track surface colours per ring.
+## Track surface colours per ring — bright enough to be clearly visible
+## against the dark background even under moderate ambient light.
 const RING_COLORS := {
-	"floor":  Color(0.18, 0.18, 0.22),
-	"lower":  Color(0.22, 0.22, 0.28),
-	"middle": Color(0.26, 0.26, 0.32),
-	"upper":  Color(0.30, 0.30, 0.36),
+	"floor":  Color(0.20, 0.35, 0.60),  # steel blue
+	"lower":  Color(0.45, 0.32, 0.55),  # purple
+	"middle": Color(0.55, 0.38, 0.22),  # burnt orange
+	"upper":  Color(0.28, 0.55, 0.35),  # green
 }
 
 # Outer wall.
@@ -201,7 +202,9 @@ func _build_outer_wall() -> void:
 		var p2 := Vector3(cos(a1) * WALL_RADIUS, base_y + WALL_HEIGHT, sin(a1) * WALL_RADIUS)
 		var p3 := Vector3(cos(a0) * WALL_RADIUS, base_y + WALL_HEIGHT, sin(a0) * WALL_RADIUS)
 
-		var normal := Vector3(cos((a0 + a1) * 0.5), 0.0, sin((a0 + a1) * 0.5)).normalized() * -1.0
+		# Normal points outward so floodlights (which are outside the wall)
+		# illuminate the outer face, and cull_mode disabled makes both sides visible.
+		var normal := Vector3(cos((a0 + a1) * 0.5), 0.0, sin((a0 + a1) * 0.5)).normalized()
 		st.set_normal(normal)
 		st.set_color(Color(0.35, 0.35, 0.4))
 
@@ -216,9 +219,12 @@ func _build_outer_wall() -> void:
 		var inst := MeshInstance3D.new()
 		inst.mesh = mesh
 		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.35, 0.35, 0.4)
+		mat.albedo_color = Color(0.45, 0.45, 0.52)
 		mat.roughness = 0.6
-		mat.metallic = 0.2
+		mat.metallic = 0.3
+		# Render both sides so the wall is visible from inside (overhead cam)
+		# and outside (trackside cam).
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		inst.material_override = mat
 		add_child(inst)
 
@@ -288,8 +294,9 @@ func _build_cannon_turret() -> void:
 
 
 func _build_floor_surface() -> void:
-	# Central arena floor (inside the track).
-	var disc := _create_disc(3.0, Color(0.1, 0.1, 0.12))
+	# Central arena floor (inside the track) — teal emissive so the playing
+	# surface centre is clearly distinct from the banked rings around it.
+	var disc := _create_disc(3.0, Color(0.08, 0.35, 0.40))
 	add_child(disc)
 
 
@@ -350,7 +357,10 @@ func _create_disc(radius: float, color: Color) -> MeshInstance3D:
 	inst.mesh = mesh
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
-	mat.roughness = 0.9
+	mat.roughness = 0.7
+	mat.emission_enabled = true
+	mat.emission = color
+	mat.emission_energy_multiplier = 0.6
 	inst.material_override = mat
 	return inst
 

@@ -11,8 +11,8 @@ const STAND_INNER_R := 17.5
 const STAND_OUTER_R := 25.0
 const STAND_BASE_Y := 1.2
 const STAND_TOP_Y := 6.0
-const STAND_COLOR := Color(0.12, 0.12, 0.16)
-const CROWD_COLOR := Color(0.35, 0.30, 0.25)
+const STAND_COLOR := Color(0.18, 0.18, 0.24)
+const CROWD_COLOR := Color(0.45, 0.38, 0.30)
 
 
 func build() -> void:
@@ -76,10 +76,10 @@ func _build_stands() -> void:
 		person.position = Vector3(cos(angle) * r, y, sin(angle) * r)
 
 		var mat := StandardMaterial3D.new()
-		# Random crowd colour.
+		# Random crowd colour — bright enough to be visible under arena lighting.
 		var hue := randf()
-		mat.albedo_color = Color.from_hsv(hue, 0.3, 0.25 + randf() * 0.15)
-		mat.roughness = 0.95
+		mat.albedo_color = Color.from_hsv(hue, 0.5, 0.45 + randf() * 0.25)
+		mat.roughness = 0.85
 		person.material_override = mat
 		add_child(person)
 

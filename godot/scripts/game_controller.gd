@@ -148,17 +148,31 @@ func _setup_lighting() -> void:
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color(0.04, 0.04, 0.08)
-	environment.ambient_light_color = Color(0.15, 0.15, 0.2)
-	environment.ambient_light_energy = 0.4
+	# Use AMBIENT_SOURCE_COLOR so the ambient_light_color is actually applied.
+	# The default AMBIENT_SOURCE_BG uses the background colour (nearly black),
+	# which makes all arena surfaces invisible against the dark backdrop.
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.55, 0.55, 0.65)
+	environment.ambient_light_energy = 1.2
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.glow_enabled = true
-	environment.glow_intensity = 0.4
+	environment.glow_intensity = 0.5
 	environment.glow_bloom = 0.3
 	environment.fog_enabled = true
 	environment.fog_light_color = Color(0.1, 0.1, 0.15)
 	environment.fog_density = 0.005
 	env.environment = environment
 	add_child(env)
+
+	# Overhead key light — strong directional from directly above so the
+	# entire arena surface is lit regardless of camera angle.
+	var key_light := DirectionalLight3D.new()
+	key_light.name = "OverheadKeyLight"
+	key_light.rotation_degrees = Vector3(-90, 0, 0)  # straight down
+	key_light.light_energy = 2.0
+	key_light.light_color = Color(1.0, 0.97, 0.92)
+	key_light.shadow_enabled = false
+	add_child(key_light)
 
 	# Four floodlights at compass points, high above the arena.
 	var floodlight_positions := [
@@ -172,11 +186,13 @@ func _setup_lighting() -> void:
 		light.name = "Floodlight_%d" % i
 		light.position = floodlight_positions[i]
 		light.look_at(Vector3.ZERO, Vector3.UP)
-		light.light_energy = 3.0
+		light.light_energy = 2.5
 		light.light_color = Color(1.0, 0.95, 0.85)
-		light.spot_range = 50.0
-		light.spot_angle = 45.0
-		light.shadow_enabled = true
+		light.spot_range = 55.0
+		light.spot_angle = 50.0
+		# Disable shadows on spot lights — shadow maps can cause rendering
+		# artefacts with many small procedural meshes in Godot 4.
+		light.shadow_enabled = false
 		add_child(light)
 
 		# Visible floodlight rig mesh.
@@ -191,13 +207,13 @@ func _setup_lighting() -> void:
 		rig.material_override = mat
 		add_child(rig)
 
-	# Directional fill (subtle moonlight).
+	# Directional fill (side/moonlight) to add depth to the banked surfaces.
 	var dir_light := DirectionalLight3D.new()
 	dir_light.name = "MoonLight"
 	dir_light.rotation_degrees = Vector3(-40, 30, 0)
-	dir_light.light_energy = 0.2
+	dir_light.light_energy = 0.8
 	dir_light.light_color = Color(0.6, 0.65, 0.8)
-	dir_light.shadow_enabled = true
+	dir_light.shadow_enabled = false
 	add_child(dir_light)
 
 

@@ -21,7 +21,7 @@ enum Mode { OVERHEAD, TRACKSIDE, GOALCAM }
 @export var orbit_speed := 0.15  # rad/s for trackside auto-orbit
 
 # ── state ────────────────────────────────────────────────────────────
-var current_mode: Mode = Mode.OVERHEAD
+var current_mode: Mode = Mode.TRACKSIDE
 var _orbit_angle := 0.0  # Current trackside orbit angle.
 var _target_pos := Vector3.ZERO
 var _target_look := Vector3.ZERO
@@ -40,7 +40,10 @@ func _ready() -> void:
 	_camera.far = 200.0
 	add_child(_camera)
 	_camera.make_current()
-	_apply_overhead_instantly()
+	# Start at a trackside angle so the banked 3D structure is immediately
+	# visible.  Press 1 to switch to overhead, 2 for trackside, 3 for goalcam.
+	_orbit_angle = PI * 0.25  # 45° offset so neither goal is dead-centre
+	_apply_trackside_instantly()
 
 
 func _process(delta: float) -> void:
@@ -103,3 +106,15 @@ func _apply_overhead_instantly() -> void:
 	if _camera:
 		_camera.global_position = _target_pos
 		_camera.look_at(_target_look, _look_up_vec())
+
+
+func _apply_trackside_instantly() -> void:
+	_target_pos = Vector3(
+		cos(_orbit_angle) * trackside_distance,
+		trackside_height,
+		sin(_orbit_angle) * trackside_distance
+	)
+	_target_look = Vector3.ZERO
+	if _camera:
+		_camera.global_position = _target_pos
+		_camera.look_at(_target_look, Vector3.UP)
