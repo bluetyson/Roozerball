@@ -334,5 +334,5 @@ static func _python_repr(s: String) -> String:
 	out = out.replace("\n", "\\n")
 	out = out.replace("\r", "\\r")
 	out = out.replace("\t", "\\t")
-	out = out.replace("\0", "\\0")
+	out = out.replace("\u0000", "\\0")
 	return "'" + out + "'"
