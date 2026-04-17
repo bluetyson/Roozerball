@@ -158,12 +158,11 @@ func _run_preflight() -> void:
 		if py.is_absolute_path() and not FileAccess.file_exists(py):
 			continue
 		var check_output: Array = []
-		var check_code := OS.execute(py, ["--version"], check_output, true)
+		var check_code := OS.execute(py, ["-c", "import sys; v=sys.version_info; print('%d.%d.%d'%(v.major,v.minor,v.micro))"], check_output, false)
 		if check_code == 0:
 			var version_str := ""
 			if check_output.size() > 0:
-				# Strip NUL bytes that can cause Godot Unicode parse warnings.
-				version_str = _strip_output(str(check_output[0]))
+				version_str = check_output[0].strip_edges()
 			preflight_py = py
 			call_deferred(
 				"_emit_engine_status",

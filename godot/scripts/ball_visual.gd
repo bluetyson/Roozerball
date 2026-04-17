@@ -20,7 +20,7 @@ const TEMP_EMISSION := {
 	"cool":     0.0,
 }
 
-const BALL_RADIUS := 0.1
+const BALL_RADIUS := 0.3
 const LERP_SPEED := 10.0
 
 # ── nodes ────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ extends Node3D
 
 # ── constants ────────────────────────────────────────────────────────
 const FIGURE_SCALE := Vector3(0.25, 0.25, 0.25)
-const BIKER_SCALE := Vector3(0.35, 0.25, 0.55)
+const BIKER_SCALE := Vector3(0.7, 0.4, 1.0)
 const LERP_SPEED := 8.0
 
 # Team colours.
@@ -82,7 +82,8 @@ func update_from_state(board_data: Array, home_team: Dictionary, visitor_team: D
 	# Create new figure nodes / update existing.
 	for fig_name in figure_states:
 		var info: Dictionary = figure_states[fig_name]
-		if not _figures.has(fig_name):
+		var is_new := not _figures.has(fig_name)
+		if is_new:
 			_create_figure_node(fig_name, info)
 		_update_figure_visual(fig_name, info)
 
@@ -99,6 +100,10 @@ func update_from_state(board_data: Array, home_team: Dictionary, visitor_team: D
 				cos(slot_off * 1.2) * 0.3,
 			)
 			_target_positions[fig_name] = base_pos + offset
+			# Snap newly-created figures to their position immediately so
+			# they don't visibly lerp from the scene origin on first spawn.
+			if is_new:
+				_figures[fig_name].position = base_pos + offset
 
 	# Remove figures no longer on the board.
 	var to_remove: Array[String] = []
@@ -147,8 +152,8 @@ func _create_figure_node(fig_name: String, info: Dictionary) -> void:
 		mesh_inst.mesh = box
 	else:
 		var capsule := CapsuleMesh.new()
-		capsule.radius = 0.12
-		capsule.height = 0.4
+		capsule.radius = 0.35
+		capsule.height = 0.85
 		mesh_inst.mesh = capsule
 
 	# Material.
@@ -156,8 +161,8 @@ func _create_figure_node(fig_name: String, info: Dictionary) -> void:
 	var team_col: Color = TEAM_COLORS.get(info.get("team", "home"), TEAM_COLORS["home"])
 	var accent: Color = TYPE_ACCENTS.get(fig_type, Color.WHITE)
 	mat.albedo_color = team_col * accent
-	mat.roughness = 0.6
-	mat.metallic = 0.15
+	mat.roughness = 0.4   # Lower roughness makes figures shinier, improving visibility under spotlights.
+	mat.metallic = 0.3    # Slightly metallic so floodlights produce specular highlights.
 	mesh_inst.material_override = mat
 
 	root.add_child(mesh_inst)
@@ -167,8 +172,8 @@ func _create_figure_node(fig_name: String, info: Dictionary) -> void:
 	label.name = "Label"
 	label.text = TYPE_LABELS.get(fig_type, "?")
 	label.font_size = 48
-	label.pixel_size = 0.005
-	label.position = Vector3(0, 0.35, 0)
+	label.pixel_size = 0.015
+	label.position = Vector3(0, 0.7, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color.WHITE
 	label.outline_size = 8
