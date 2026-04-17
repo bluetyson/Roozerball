@@ -140,7 +140,9 @@ func _create_track_quad(a0: float, a1: float, r_in: float, r_out: float,
 
 	# Banking: the outer edge of each ring rises by the incline angle over
 	# the ring width, creating the characteristic banked-track appearance.
-	var outer_y := height + (r_out - r_in) * sin(deg_to_rad(incline_deg))
+	# Use tan() because incline_deg is measured from horizontal, so the
+	# vertical rise over a horizontal run is run * tan(angle).
+	var outer_y := height + (r_out - r_in) * tan(deg_to_rad(incline_deg))
 
 	# Subdivide the arc into ARC_SUBDIVISIONS steps so the ring edges follow
 	# the actual curve instead of a single straight chord.  This prevents the
