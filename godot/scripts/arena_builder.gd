@@ -131,13 +131,16 @@ func _build_track_surface() -> void:
 
 
 func _create_track_quad(a0: float, a1: float, r_in: float, r_out: float,
-						height: float, _incline_deg: float, color: Color,
+						height: float, incline_deg: float, color: Color,
 						_sector_idx: int, _ring_name: String, _sq_pos: int) -> MeshInstance3D:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
 	st.set_color(color)
-	st.set_normal(Vector3.UP)
+
+	# Banking: the outer edge of each ring rises by the incline angle over
+	# the ring width, creating the characteristic banked-track appearance.
+	var outer_y := height + (r_out - r_in) * sin(deg_to_rad(incline_deg))
 
 	# Subdivide the arc into ARC_SUBDIVISIONS steps so the ring edges follow
 	# the actual curve instead of a single straight chord.  This prevents the
@@ -149,20 +152,25 @@ func _create_track_quad(a0: float, a1: float, r_in: float, r_out: float,
 		var sa := a0 + t0 * (a1 - a0)
 		var ea := a0 + t1 * (a1 - a0)
 
-		var p0 := Vector3(cos(sa) * r_in,  height, sin(sa) * r_in)
-		var p1 := Vector3(cos(ea) * r_in,  height, sin(ea) * r_in)
-		var p2 := Vector3(cos(ea) * r_out, height, sin(ea) * r_out)
-		var p3 := Vector3(cos(sa) * r_out, height, sin(sa) * r_out)
+		var p0 := Vector3(cos(sa) * r_in,  height,  sin(sa) * r_in)
+		var p1 := Vector3(cos(ea) * r_in,  height,  sin(ea) * r_in)
+		var p2 := Vector3(cos(ea) * r_out, outer_y, sin(ea) * r_out)
+		var p3 := Vector3(cos(sa) * r_out, outer_y, sin(sa) * r_out)
 
-		# Triangle 1 — wound counter-clockwise when viewed from above (+Y).
+		# Triangles wound counter-clockwise when viewed from above/outside (+Y),
+		# so the front face (and its computed normal) faces upward and is visible
+		# from the overhead and trackside cameras.
 		st.add_vertex(p0)
-		st.add_vertex(p2)
 		st.add_vertex(p1)
+		st.add_vertex(p2)
 		# Triangle 2.
 		st.add_vertex(p0)
-		st.add_vertex(p3)
 		st.add_vertex(p2)
+		st.add_vertex(p3)
 
+	# Compute normals from the actual vertex positions so the banked-surface
+	# lighting is accurate (normals tilt outward/upward with the banking).
+	st.generate_normals()
 	var mesh := st.commit()
 	var inst := MeshInstance3D.new()
 	inst.mesh = mesh
@@ -330,9 +338,11 @@ func _create_disc(radius: float, color: Color) -> MeshInstance3D:
 	for i in range(segments):
 		var a0 := float(i) / segments * TAU
 		var a1 := float(i + 1) / segments * TAU
+		# Wound CCW from above (+Y) so the disc faces upward and is visible
+		# from the overhead camera.
 		st.add_vertex(Vector3.ZERO)
-		st.add_vertex(Vector3(cos(a0) * radius, 0, sin(a0) * radius))
 		st.add_vertex(Vector3(cos(a1) * radius, 0, sin(a1) * radius))
+		st.add_vertex(Vector3(cos(a0) * radius, 0, sin(a0) * radius))
 	var mesh := st.commit()
 	var inst := MeshInstance3D.new()
 	inst.mesh = mesh

@@ -12,7 +12,7 @@ extends Node3D
 enum Mode { OVERHEAD, TRACKSIDE, GOALCAM }
 
 # ── configuration ────────────────────────────────────────────────────
-@export var overhead_height := 55.0
+@export var overhead_height := 32.0
 @export var trackside_height := 4.0
 @export var trackside_distance := 20.0
 @export var goalcam_distance := 5.0
