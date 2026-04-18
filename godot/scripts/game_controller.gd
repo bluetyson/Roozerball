@@ -118,6 +118,15 @@ func _on_state_updated(state: Dictionary) -> void:
 	if ball_sector is int and ball_sector >= 0:
 		camera_rig.focus_sector = ball_sector
 
+	# Feed world-space positions for follow modes.
+	camera_rig.ball_world_pos = ball.position
+	var carrier_name = ball_data.get("carrier")
+	if carrier_name is String and carrier_name != "":
+		var cp := figures.get_figure_world_pos(carrier_name)
+		camera_rig.follow_target_pos = cp if cp != Vector3.ZERO else ball.position
+	else:
+		camera_rig.follow_target_pos = ball.position
+
 	# Flash goal effect.
 	if state.has("phase_result"):
 		var pr: Dictionary = state["phase_result"]

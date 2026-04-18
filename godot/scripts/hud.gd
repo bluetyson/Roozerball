@@ -78,13 +78,15 @@ func _build_ui() -> void:
 	add_child(penalty_container)
 
 	# ── Controls help (bottom-right) ─────────────────────────────────
-	var ctrl_panel := _make_panel(Vector2(1560, 900), Vector2(350, 160))
+	var ctrl_panel := _make_panel(Vector2(1560, 860), Vector2(350, 200))
 	_controls_label = Label.new()
 	_controls_label.text = (
 		"[Space] Advance phase\n"
 		+ "[T] Play full turn\n"
 		+ "[A] Toggle auto-play\n"
-		+ "[1] Overhead  [2] Trackside  [3] Goal-cam"
+		+ "[1] Overhead  [2] Trackside  [3] Goal-cam\n"
+		+ "[4] Follow ball  [5] Follow player\n"
+		+ "[RMB/MMB drag] Orbit / tilt"
 	)
 	_controls_label.add_theme_font_size_override("font_size", 14)
 	_controls_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))

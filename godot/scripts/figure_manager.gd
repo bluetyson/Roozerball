@@ -116,6 +116,15 @@ func update_from_state(board_data: Array, home_team: Dictionary, visitor_team: D
 		_target_positions.erase(fig_name)
 
 
+## Return the current world-space position of a named figure, or Vector3.ZERO
+## if the figure does not exist.
+func get_figure_world_pos(fig_name: String) -> Vector3:
+	var node: Node3D = _figures.get(fig_name)
+	if node == null:
+		return Vector3.ZERO
+	return node.global_position
+
+
 ## Highlight a specific figure (e.g. ball carrier).
 func highlight_figure(fig_name: String, color: Color) -> void:
 	if _figures.has(fig_name):
